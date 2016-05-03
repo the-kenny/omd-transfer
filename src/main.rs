@@ -5,6 +5,7 @@ extern crate regex;
 
 use chrono::*;
 
+use std::fs;
 use std::io;
 use std::io::Read;
 use std::fs::File;
@@ -13,8 +14,6 @@ use std::path::{Path,PathBuf};
 use hyper::Client;
 use hyper::header::Connection;
 use regex::Regex;
-
-use std::collections::HashSet;
 
 const BASE_URL: &'static str = "http://192.168.0.10";
 
@@ -35,7 +34,7 @@ fn parse_fat_datetime(date: u16, time: u16) -> NaiveDateTime {
   let minutes =  time >> 5  & 0b00111111;
   let hours   =  time >> 11 & 0b00011111;
   assert!(seconds < 60);
-  
+
   NaiveDate::from_ymd(year as i32, month as u32, day as u32)
     .and_hms(hours as u32, minutes as u32, seconds as u32)
 }
@@ -54,7 +53,7 @@ impl TransferItem {
     let fat_date = u16::from_str_radix(row[4], 10).expect("Invalid date");
     let fat_time = u16::from_str_radix(row[5], 10).expect("Invalid time");
     let date = parse_fat_datetime(fat_date,fat_time);
-    
+
     TransferItem {
       parent: row[0].to_string(),
       filename: row[1].to_string(),
@@ -73,16 +72,24 @@ impl TransferItem {
   pub fn path(&self) -> String {
     format!("{}/{}", self.parent, self.filename)
   }
-  
+
   pub fn download<P: AsRef<Path>>(&self, target: &P) -> std::io::Result<()> {
-    let mut f = try!(File::create(target));
     let client = Client::new();
 
     let mut res = client.get(&format!("{}/{}", BASE_URL, self.path()))
       .header(Connection::close())
       .send().unwrap();
 
-    try!(std::io::copy(&mut res, &mut f));
+    let mut tmp = target.as_ref().to_path_buf();
+    tmp.set_file_name("incomplete_download");
+
+    {
+      let mut out = try!(File::create(&tmp));
+      try!(std::io::copy(&mut res, &mut out));
+      try!(out.sync_all());
+    }
+
+    try!(fs::rename(tmp, target));
     Ok(())
   }
 }
@@ -100,12 +107,10 @@ fn test_from_row() {
   }
 }
 
-fn list_directory(dir: &str) -> Vec<TransferItem> {
+fn list_directory(dir: &str) -> hyper::Result<Vec<TransferItem>> {
   let client = Client::new();
 
-  let mut res = client.get(&format!("{}/get_imglist.cgi?DIR={}", BASE_URL, dir))
-    .header(Connection::close())
-    .send().unwrap();
+  let mut res = try!(client.get(&format!("{}/get_imglist.cgi?DIR={}", BASE_URL, dir)).send());
 
   let mut body = String::new();
   res.read_to_string(&mut body).unwrap();
@@ -113,98 +118,106 @@ fn list_directory(dir: &str) -> Vec<TransferItem> {
   let mut rows = body.split("\r\n");
   let version = rows.next().unwrap();
   assert_eq!(version, "VER_100");
-  rows
+  let rows = rows
     .filter(|row| !row.is_empty())
     .map(|row| TransferItem::from_row(&row))
-    .collect()
+    .collect();
+
+  Ok(rows)
 }
 
 struct Transfer {
-  camera_dir: String,
-  entries: HashSet<TransferItem>,
+  download_dir: PathBuf,
+  state_file: PathBuf,
+  entries: Vec<TransferItem>,
 }
 
 impl Transfer {
-  pub fn new(camera_dir: &str) -> Self {
+  pub fn new<P: AsRef<Path>>(download_dir: P) -> Self {
+    assert!(download_dir.as_ref().is_dir());
+
+    let mut state_file = download_dir.as_ref().to_path_buf();
+    state_file.push("omd-downloader.state");
+
     Transfer {
-      camera_dir: camera_dir.to_string(),
-      entries: HashSet::new(),
+      download_dir: download_dir.as_ref().to_path_buf(),
+      state_file: state_file,
+      entries: Vec::new(),
     }
   }
 
-  pub fn list_all(&mut self) {
-    let dir = self.camera_dir.clone();
-    self.list_rec(&dir);
+  fn list_items(&mut self) -> hyper::Result<()> {
+    println!("Fetching picture list from camera...");
+    let mut acc = vec![];
+    try!(self.list_rec("/DCIM", &mut acc));
+    acc.sort_by_key(|e| e.date);
+    println!("Got {} pictures", acc.len());
+    self.entries = acc;
+    Ok(())
   }
 
-  fn state_file<P: AsRef<Path>>(dir: P) -> PathBuf {
-    let mut state_file: PathBuf = dir.as_ref().to_path_buf();
-    state_file.push("omd-downloader.state");
-    state_file
-  }
-  
-  fn last_download_date<P: AsRef<Path>>(target_dir: P) -> Option<NaiveDateTime> {
+  fn last_download_date(&self) -> Option<NaiveDateTime> {
     use std::io::ErrorKind;
-    match File::open(&Self::state_file(target_dir)) {
+    match File::open(&self.state_file) {
       Err(ref e) if e.kind() == ErrorKind::NotFound => None,
       Err(ref e) => panic!(e.to_string()),
       Ok(mut f) => {
+        use std::str::FromStr;
+
         let mut buf = String::new();
         f.read_to_string(&mut buf).expect("Failed to read from state file");
-        use std::str::FromStr;
-        let date = NaiveDateTime::from_str(&buf).expect("Corrypt state file");
+        let ts: i64 = i64::from_str(&buf).expect("Corrupt state file");
+        let date = NaiveDateTime::from_timestamp(ts, 0);
         println!("read date from state file: {}", date);
         Some(date)
       }
     }
   }
 
-  fn store_download_date<P: AsRef<Path>>(target_dir: P, date: &NaiveDateTime)
+  fn store_download_date(&self, date: &NaiveDateTime)
                                          -> io::Result<()> {
     use std::io::Write;
-    
-    let mut f = try!(File::create(&Self::state_file(target_dir)));
-    try!(f.write_fmt(format_args!("{}", date)));
+
+    let mut f = try!(File::create(&self.state_file));
+    try!(f.write_fmt(format_args!("{}", date.timestamp())));
     try!(f.sync_all());
     Ok(())
   }
 
-  pub fn download_all<P: AsRef<Path>>(&self, target_dir: P) -> io::Result<()> {
-    let last_downloaded = Self::last_download_date(&target_dir);
-    let mut entries: Vec<_> = match last_downloaded {
+  pub fn download_new(&self) -> io::Result<()> {
+    let last_downloaded = self.last_download_date();
+    let entries: Vec<_> = match last_downloaded {
       None => self.entries.iter().collect(),
       Some(date) => self.entries.iter()
         .filter(|e| e.date > date)
         .collect()
     };
 
-    entries.sort_by_key(|e| e.date);
-
     for entry in entries {
-      let mut target = target_dir.as_ref().to_path_buf();
+      let mut target = self.download_dir.clone();
       target.push(&entry.filename);
       println!("Downloading {} to {:?}", entry.filename, target);
       try!(entry.download(&target));
-      try!(Self::store_download_date(&target_dir, &entry.date));
+      try!(self.store_download_date(&entry.date));
     }
 
     Ok(())
   }
 
-  fn list_rec(&mut self, dir: &str) {
-    for entry in list_directory(dir) {
+  fn list_rec(&mut self, dir: &str, mut acc: &mut Vec<TransferItem>) -> hyper::Result<()> {
+    for entry in try!(list_directory(dir)) {
       if entry.is_directory() {
-        self.list_rec(&entry.path());
+        try!(self.list_rec(&entry.path(), &mut acc));
       } else {
-        self.entries.insert(entry);
+        acc.push(entry);
       }
     }
+    Ok(())
   }
 }
 
 fn main() {
-  let mut transfer = Transfer::new("/DCIM");
-  transfer.list_all();
-
-  transfer.download_all("foo/");
+  let mut transfer = Transfer::new("foo/");
+  transfer.list_items().unwrap();
+  transfer.download_new().unwrap();
 }
