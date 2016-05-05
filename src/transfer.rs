@@ -2,7 +2,6 @@ use std::{fs, io};
 use std::fs::File;
 use std::io::{Read,Write};
 use std::path::{Path,PathBuf};
-use std::str::FromStr;
 
 use error::{Error,Result};
 
@@ -126,6 +125,8 @@ pub struct Transfer {
   http_client: Client,
 }
 
+const DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S";
+
 impl Transfer {
   pub fn new<P: AsRef<Path>>(download_dir: P) -> Self {
     assert!(download_dir.as_ref().is_dir());
@@ -159,8 +160,8 @@ impl Transfer {
       Ok(mut f) => {
         let mut buf = String::new();
         f.read_to_string(&mut buf).expect("Failed to read from state file");
-        let ts: i64 = i64::from_str(&buf).expect("Corrupt state file");
-        let date = NaiveDateTime::from_timestamp(ts, 0);
+        let date = NaiveDateTime::parse_from_str(&buf.trim(), DATE_FORMAT)
+          .expect("Corrup history file");
         println!("read date from state file: {}", date);
         Some(date)
       }
@@ -170,7 +171,7 @@ impl Transfer {
   fn store_download_date(&self, date: &NaiveDateTime)
                                          -> io::Result<()> {
     let mut f = try!(File::create(&self.state_file));
-    try!(f.write_fmt(format_args!("{}", date.timestamp())));
+    try!(f.write_fmt(format_args!("{}", date.format(DATE_FORMAT))));
     try!(f.sync_all());
     Ok(())
   }
