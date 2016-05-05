@@ -3,13 +3,13 @@ extern crate chrono;
 extern crate regex;
 #[macro_use] extern crate lazy_static;
 
-use chrono::*;
-
 use std::{fs, io};
-use std::io::{Read,Write};
 use std::fs::File;
+use std::io::{Read,Write};
 use std::path::{Path,PathBuf};
+use std::str::FromStr;
 
+use chrono::*;
 use hyper::Client;
 use regex::Regex;
 
@@ -19,6 +19,7 @@ const BASE_URL: &'static str = "http://192.168.0.10";
 enum Error {
   Http(hyper::Error),
   Io(io::Error),
+  ProtocolError,
 }
 
 type Result<T> = std::result::Result<T,Error>;
@@ -121,7 +122,7 @@ fn test_from_row() {
   }
 }
 
-fn list_directory(client: &Client, dir: &str) -> hyper::Result<Vec<TransferItem>> {
+fn list_directory(client: &Client, dir: &str) -> Result<Vec<TransferItem>> {
   let mut res = try!(client.get(&format!("{}/get_imglist.cgi?DIR={}", BASE_URL, dir)).send());
 
   let mut body = String::new();
@@ -129,7 +130,11 @@ fn list_directory(client: &Client, dir: &str) -> hyper::Result<Vec<TransferItem>
 
   let mut rows = body.split("\r\n");
   let version = rows.next().expect("Invalid camera response");
-  assert_eq!(version, "VER_100");
+
+  if version != "VER_100" {
+    return Err(Error::ProtocolError)
+  }
+
   let rows = rows
     .filter(|row| !row.is_empty())
     .map(|row| TransferItem::from_row(&row))
@@ -160,7 +165,7 @@ impl Transfer {
     }
   }
 
-  fn list_items(&mut self) -> hyper::Result<()> {
+  fn refresh_items(&mut self) -> Result<()> {
     println!("Fetching picture list from camera...");
     let mut acc = vec![];
     try!(self.list_rec("/DCIM", &mut acc));
@@ -176,8 +181,6 @@ impl Transfer {
       Err(ref e) if e.kind() == ErrorKind::NotFound => None,
       Err(ref e) => panic!(e.to_string()),
       Ok(mut f) => {
-        use std::str::FromStr;
-
         let mut buf = String::new();
         f.read_to_string(&mut buf).expect("Failed to read from state file");
         let ts: i64 = i64::from_str(&buf).expect("Corrupt state file");
@@ -216,7 +219,7 @@ impl Transfer {
     Ok(())
   }
 
-  fn list_rec(&mut self, dir: &str, mut acc: &mut Vec<TransferItem>) -> hyper::Result<()> {
+  fn list_rec(&mut self, dir: &str, mut acc: &mut Vec<TransferItem>) -> Result<()> {
     let entries = try!(list_directory(&self.http_client, dir));
     acc.reserve(entries.len());
     for entry in entries {
@@ -232,6 +235,6 @@ impl Transfer {
 
 fn main() {
   let mut transfer = Transfer::new("foo/");
-  transfer.list_items().unwrap();
-  transfer.download_new().unwrap();
+  transfer.refresh_items().expect("Failed to list items on camera");
+  transfer.download_new().expect("Download failed");
 }
