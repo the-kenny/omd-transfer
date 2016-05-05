@@ -1,5 +1,5 @@
 [package]
-name = "omd-transfer"
+name = "omd_transfer"
 version = "0.1.0"
 authors = ["Moritz Ulrich <moritz@tarn-vedra.de>"]
 
