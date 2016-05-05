@@ -15,7 +15,27 @@ use regex::Regex;
 
 const BASE_URL: &'static str = "http://192.168.0.10";
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug)]
+enum Error {
+  Http(hyper::Error),
+  Io(io::Error),
+}
+
+type Result<T> = std::result::Result<T,Error>;
+
+impl From<io::Error> for Error {
+  fn from(err: io::Error) -> Self {
+      Error::Io(err)
+  }
+}
+
+impl From<hyper::Error> for Error {
+  fn from(err: hyper::Error) -> Self {
+      Error::Http(err)
+  }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 struct TransferItem {
   pub parent: String,
   pub filename: String,
@@ -71,9 +91,9 @@ impl TransferItem {
     format!("{}/{}", self.parent, self.filename)
   }
 
-  pub fn download<P: AsRef<Path>>(&self, client: &Client, target: &P) -> io::Result<()> {
+  pub fn download<P: AsRef<Path>>(&self, client: &Client, target: &P) -> Result<()> {
     let url = format!("{}/{}", BASE_URL, self.path());
-    let mut res = client.get(&url).send().unwrap();
+    let mut res = try!(client.get(&url).send());
 
     let mut tmp = target.as_ref().to_str().unwrap().to_string();
     tmp.push_str(".incomplete");
@@ -176,7 +196,7 @@ impl Transfer {
     Ok(())
   }
 
-  pub fn download_new(&self) -> io::Result<()> {
+  pub fn download_new(&self) -> Result<()> {
     let last_downloaded = self.last_download_date();
     let entries: Vec<_> = match last_downloaded {
       None => self.entries.iter().collect(),
