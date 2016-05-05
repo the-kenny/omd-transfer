@@ -5,14 +5,12 @@ extern crate regex;
 
 use chrono::*;
 
-use std::fs;
-use std::io;
-use std::io::Read;
+use std::{fs, io};
+use std::io::{Read,Write};
 use std::fs::File;
 use std::path::{Path,PathBuf};
 
 use hyper::Client;
-use hyper::header::Connection;
 use regex::Regex;
 
 const BASE_URL: &'static str = "http://192.168.0.10";
@@ -73,16 +71,12 @@ impl TransferItem {
     format!("{}/{}", self.parent, self.filename)
   }
 
-  pub fn download<P: AsRef<Path>>(&self, target: &P) -> std::io::Result<()> {
-    let client = Client::new();
+  pub fn download<P: AsRef<Path>>(&self, client: &Client, target: &P) -> io::Result<()> {
+    let url = format!("{}/{}", BASE_URL, self.path());
+    let mut res = client.get(&url).send().unwrap();
 
-    let mut res = client.get(&format!("{}/{}", BASE_URL, self.path()))
-      .header(Connection::close())
-      .send().unwrap();
-
-    let mut tmp = target.as_ref().to_path_buf();
-    tmp.set_file_name("incomplete_download");
-
+    let mut tmp = target.as_ref().to_str().unwrap().to_string();
+    tmp.push_str(".incomplete");
     {
       let mut out = try!(File::create(&tmp));
       try!(std::io::copy(&mut res, &mut out));
@@ -107,16 +101,14 @@ fn test_from_row() {
   }
 }
 
-fn list_directory(dir: &str) -> hyper::Result<Vec<TransferItem>> {
-  let client = Client::new();
-
+fn list_directory(client: &Client, dir: &str) -> hyper::Result<Vec<TransferItem>> {
   let mut res = try!(client.get(&format!("{}/get_imglist.cgi?DIR={}", BASE_URL, dir)).send());
 
   let mut body = String::new();
   res.read_to_string(&mut body).unwrap();
 
   let mut rows = body.split("\r\n");
-  let version = rows.next().unwrap();
+  let version = rows.next().expect("Invalid camera response");
   assert_eq!(version, "VER_100");
   let rows = rows
     .filter(|row| !row.is_empty())
@@ -130,6 +122,7 @@ struct Transfer {
   download_dir: PathBuf,
   state_file: PathBuf,
   entries: Vec<TransferItem>,
+  http_client: Client,
 }
 
 impl Transfer {
@@ -143,6 +136,7 @@ impl Transfer {
       download_dir: download_dir.as_ref().to_path_buf(),
       state_file: state_file,
       entries: Vec::new(),
+      http_client: Client::new(),
     }
   }
 
@@ -176,8 +170,6 @@ impl Transfer {
 
   fn store_download_date(&self, date: &NaiveDateTime)
                                          -> io::Result<()> {
-    use std::io::Write;
-
     let mut f = try!(File::create(&self.state_file));
     try!(f.write_fmt(format_args!("{}", date.timestamp())));
     try!(f.sync_all());
@@ -197,7 +189,7 @@ impl Transfer {
       let mut target = self.download_dir.clone();
       target.push(&entry.filename);
       println!("Downloading {} to {:?}", entry.filename, target);
-      try!(entry.download(&target));
+      try!(entry.download(&self.http_client, &target));
       try!(self.store_download_date(&entry.date));
     }
 
@@ -205,7 +197,9 @@ impl Transfer {
   }
 
   fn list_rec(&mut self, dir: &str, mut acc: &mut Vec<TransferItem>) -> hyper::Result<()> {
-    for entry in try!(list_directory(dir)) {
+    let entries = try!(list_directory(&self.http_client, dir));
+    acc.reserve(entries.len());
+    for entry in entries {
       if entry.is_directory() {
         try!(self.list_rec(&entry.path(), &mut acc));
       } else {
