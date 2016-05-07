@@ -98,6 +98,8 @@ fn test_from_row() {
 }
 
 fn list_directory(client: &Client, dir: &str) -> Result<Vec<TransferItem>> {
+  debug!("Listing directory {:?}", dir);
+  
   let mut res = try!(client.get(&format!("{}/get_imglist.cgi?DIR={}", BASE_URL, dir)).send());
 
   let mut body = String::new();
@@ -143,11 +145,11 @@ impl Transfer {
   }
 
   pub fn refresh_items(&mut self) -> Result<()> {
-    println!("Fetching picture list from camera...");
+    info!("Fetching picture list from camera...");
     let mut acc = vec![];
     try!(self.list_rec("/DCIM", &mut acc));
     acc.sort_by_key(|e| e.date);
-    println!("Got {} pictures", acc.len());
+    info!("Got {} pictures", acc.len());
     self.entries = acc;
     Ok(())
   }
@@ -162,7 +164,7 @@ impl Transfer {
         f.read_to_string(&mut buf).expect("Failed to read from state file");
         let date = NaiveDateTime::parse_from_str(&buf.trim(), DATE_FORMAT)
           .expect("Corrup history file");
-        println!("read date from state file: {}", date);
+        info!("read date from state file: {}", date);
         Some(date)
       }
     }
@@ -185,10 +187,12 @@ impl Transfer {
         .collect()
     };
 
+    info!("Got {} files to download", entries.len());
+
     for entry in entries {
       let mut target = self.download_dir.clone();
       target.push(&entry.filename);
-      println!("Downloading {} to {:?}", entry.filename, target);
+      info!("Downloading {} to {:?}", entry.filename, target);
       try!(entry.download(&self.http_client, &target));
       try!(self.store_download_date(&entry.date));
     }
