@@ -7,9 +7,10 @@ use error::{Error,Result};
 
 use chrono::{NaiveDate,NaiveDateTime};
 use hyper::Client;
+use hyper::status::StatusCode;
 use regex::Regex;
 
-const BASE_URL: &'static str = "http://192.168.0.10";
+const BASE_URL: &'static str = "http://192.168.0.10/";
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct TransferItem {
@@ -68,11 +69,14 @@ impl TransferItem {
   }
 
   pub fn download<P: AsRef<Path>>(&self, client: &Client, target: &P) -> Result<()> {
-    let url = format!("{}/{}", BASE_URL, self.path());
+    let url = format!("{}{}", BASE_URL, self.path());
+    debug!("Fetching {}", url);
     let mut res = try!(client.get(&url).send());
+    assert_eq!(res.status, StatusCode::Ok);
 
     let mut tmp = target.as_ref().to_str().unwrap().to_string();
     tmp.push_str(".incomplete");
+
     {
       let mut out = try!(File::create(&tmp));
       try!(io::copy(&mut res, &mut out));
@@ -97,15 +101,19 @@ fn test_from_row() {
   }
 }
 
-fn list_directory(client: &Client, dir: &str) -> Result<Vec<TransferItem>> {
-  debug!("Listing directory {:?}", dir);
-  
-  let mut res = try!(client.get(&format!("{}/get_imglist.cgi?DIR={}", BASE_URL, dir)).send());
+fn request_list(client: &Client, endpoint: &str) -> Result<Vec<TransferItem>> {
+  let mut url = BASE_URL.to_string();
+  url.push_str(endpoint);
+
+  debug!("fetching listing at {:?}", url);
+
+  let mut res = try!(client.get(&url).send());
+  assert_eq!(res.status, StatusCode::Ok);
 
   let mut body = String::new();
-  res.read_to_string(&mut body).unwrap();
-
+  try!(res.read_to_string(&mut body));
   let mut rows = body.split("\r\n");
+
   let version = rows.next().expect("Invalid camera response");
 
   if version != "VER_100" {
@@ -200,8 +208,24 @@ impl Transfer {
     Ok(())
   }
 
+  pub fn download_transfer_order(&self) -> Result<()> {
+    debug!("Checking for transfer order...");
+    let entries = try!(request_list(&self.http_client, "get_rsvimglist.cgi"));
+    info!("Got {} items in transfer order", entries.len());
+
+    for entry in entries {
+      let mut target = self.download_dir.clone();
+      target.push(&entry.filename);
+      info!("Downloading {} to {:?}", entry.filename, target);
+      try!(entry.download(&self.http_client, &target));
+    }
+
+    Ok(())
+  }
+
   fn list_rec(&mut self, dir: &str, mut acc: &mut Vec<TransferItem>) -> Result<()> {
-    let entries = try!(list_directory(&self.http_client, dir));
+    let endpoint = format!("get_imglist.cgi?DIR={}", dir);
+    let entries = try!(request_list(&self.http_client, &endpoint));
     acc.reserve(entries.len());
     for entry in entries {
       if entry.is_directory() {
