@@ -5,9 +5,13 @@ use omd_transfer::*;
 
 fn main() {
   env_logger::init().unwrap();
+
+  let config = Config {
+    download_dir: Some("foo/".into()),
+    transfer_order_dir: None,
+    error_strategy: ErrorStrategy::Abort,
+  };
   
-  let mut transfer = Transfer::new("foo/");
-  transfer.download_transfer_order().expect("Failed to download transfer order");
-  transfer.refresh_items().expect("Failed to list items on camera");
+  let transfer = Transfer::from_config(&config).unwrap();
   transfer.download_new().expect("Download failed");
 }

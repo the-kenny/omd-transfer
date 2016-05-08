@@ -4,6 +4,7 @@ use std::io::{Read,Write};
 use std::path::{Path,PathBuf};
 
 use error::{Error,Result};
+use config::*;
 
 use chrono::{NaiveDate,NaiveDateTime};
 use hyper::Client;
@@ -128,39 +129,104 @@ fn request_list(client: &Client, endpoint: &str) -> Result<Vec<TransferItem>> {
   Ok(rows)
 }
 
+fn list_items(client: &Client) -> Result<Vec<TransferItem>> {
+  fn list_rec(client: &Client, dir: &str, mut acc: &mut Vec<TransferItem>) -> Result<()> {
+    let endpoint = format!("get_imglist.cgi?DIR={}", dir);
+    let entries = try!(request_list(&client, &endpoint));
+    acc.reserve(entries.len());
+    for entry in entries {
+      if entry.is_directory() {
+        try!(list_rec(&client, &entry.path(), &mut acc));
+      } else {
+        acc.push(entry);
+      }
+    }
+    Ok(())
+  }
+
+  let mut entries = vec![];
+  try!(list_rec(&client, "/DCIM", &mut entries));
+  Ok(entries)
+}
+
+fn list_transfer_order(client: &Client) -> Result<Vec<TransferItem>> {
+  request_list(&client, "get_rsvimglist.cgi")
+}
+
 pub struct Transfer {
   download_dir: PathBuf,
   state_file: PathBuf,
-  entries: Vec<TransferItem>,
+  error_strategy: ErrorStrategy,
   http_client: Client,
 }
 
 const DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S";
 
 impl Transfer {
-  pub fn new<P: AsRef<Path>>(download_dir: P) -> Self {
-    assert!(download_dir.as_ref().is_dir());
+  pub fn from_config(config: &Config) -> Option<Self> {
+    config.download_dir.clone().map(|download_dir| {
+      // TODO: Allow users to specify separate path via config
+      let mut state_file = download_dir.clone();
+      state_file.push("omd-downloader.state");
 
-    let mut state_file = download_dir.as_ref().to_path_buf();
-    state_file.push("omd-downloader.state");
-
-    Transfer {
-      download_dir: download_dir.as_ref().to_path_buf(),
-      state_file: state_file,
-      entries: Vec::new(),
-      http_client: Client::new(),
-    }
+      Transfer {
+        download_dir: download_dir,
+        state_file: state_file,
+        error_strategy: config.error_strategy,
+        http_client: Client::new(),
+      }
+    })
   }
 
-  pub fn refresh_items(&mut self) -> Result<()> {
-    info!("Fetching picture list from camera...");
-    let mut acc = vec![];
-    try!(self.list_rec("/DCIM", &mut acc));
-    acc.sort_by_key(|e| e.date);
-    info!("Got {} pictures", acc.len());
-    self.entries = acc;
+  pub fn download_new(&self) -> Result<()> {
+    let last_downloaded = self.last_download_date();
+    let entries = try!(list_items(&self.http_client));
+    let entries: Vec<_> = match last_downloaded {
+      None => entries.iter().collect(),
+      Some(date) => entries.iter()
+        .filter(|e| e.date > date)
+        .collect()
+    };
+
+    info!("Got {} files to download", entries.len());
+
+    for entry in entries {
+      let mut target = self.download_dir.clone();
+      target.push(&entry.filename);
+      info!("Downloading {} to {:?}", entry.filename, target);
+      
+      let result = entry.download(&self.http_client, &target);
+      if result.is_err() {
+        warn!("Failed to download {}", entry.filename);
+        if self.error_strategy == ErrorStrategy::Abort {
+          return result;
+        };
+      };
+      
+      try!(self.store_download_date(&entry.date));
+    }
+
     Ok(())
   }
+
+  // pub fn download_transfer_order(&self) -> Result<()> {
+  //   let download_dir = self.config.transfer_order_dir.clone()
+  //     .expect("No transfer_order_directory configured");
+  
+  //   debug!("Checking for transfer order...");
+  //   let entries = try!(request_list(&self.http_client, "get_rsvimglist.cgi"));
+  //   info!("Got {} items in transfer order", entries.len());
+
+  //   for entry in entries {
+  //     let mut target = download_dir
+  //       .clone();
+  //     target.push(&entry.filename);
+  //     info!("Downloading {} to {:?}", entry.filename, target);
+  //     try!(entry.download(&self.http_client, &target));
+  //   }
+
+  //   Ok(())
+  // }
 
   fn last_download_date(&self) -> Option<NaiveDateTime> {
     use std::io::ErrorKind;
@@ -178,62 +244,10 @@ impl Transfer {
     }
   }
 
-  fn store_download_date(&self, date: &NaiveDateTime)
-                                         -> io::Result<()> {
+  fn store_download_date(&self, date: &NaiveDateTime) -> io::Result<()> {
     let mut f = try!(File::create(&self.state_file));
     try!(f.write_fmt(format_args!("{}", date.format(DATE_FORMAT))));
     try!(f.sync_all());
-    Ok(())
-  }
-
-  pub fn download_new(&self) -> Result<()> {
-    let last_downloaded = self.last_download_date();
-    let entries: Vec<_> = match last_downloaded {
-      None => self.entries.iter().collect(),
-      Some(date) => self.entries.iter()
-        .filter(|e| e.date > date)
-        .collect()
-    };
-
-    info!("Got {} files to download", entries.len());
-
-    for entry in entries {
-      let mut target = self.download_dir.clone();
-      target.push(&entry.filename);
-      info!("Downloading {} to {:?}", entry.filename, target);
-      try!(entry.download(&self.http_client, &target));
-      try!(self.store_download_date(&entry.date));
-    }
-
-    Ok(())
-  }
-
-  pub fn download_transfer_order(&self) -> Result<()> {
-    debug!("Checking for transfer order...");
-    let entries = try!(request_list(&self.http_client, "get_rsvimglist.cgi"));
-    info!("Got {} items in transfer order", entries.len());
-
-    for entry in entries {
-      let mut target = self.download_dir.clone();
-      target.push(&entry.filename);
-      info!("Downloading {} to {:?}", entry.filename, target);
-      try!(entry.download(&self.http_client, &target));
-    }
-
-    Ok(())
-  }
-
-  fn list_rec(&mut self, dir: &str, mut acc: &mut Vec<TransferItem>) -> Result<()> {
-    let endpoint = format!("get_imglist.cgi?DIR={}", dir);
-    let entries = try!(request_list(&self.http_client, &endpoint));
-    acc.reserve(entries.len());
-    for entry in entries {
-      if entry.is_directory() {
-        try!(self.list_rec(&entry.path(), &mut acc));
-      } else {
-        acc.push(entry);
-      }
-    }
     Ok(())
   }
 }
