@@ -1,4 +1,5 @@
 use std::{fs, io};
+use std::collections::LinkedList;
 use std::fs::File;
 use std::io::{Read,Write};
 use std::path::{Path,PathBuf};
@@ -130,22 +131,23 @@ fn request_list(client: &Client, endpoint: &str) -> Result<Vec<TransferItem>> {
 }
 
 fn list_items(client: &Client) -> Result<Vec<TransferItem>> {
-  fn list_rec(client: &Client, dir: &str, mut acc: &mut Vec<TransferItem>) -> Result<()> {
+  fn list_rec(client: &Client, dir: &str) -> Result<LinkedList<TransferItem>> {
     let endpoint = format!("get_imglist.cgi?DIR={}", dir);
     let entries = try!(request_list(&client, &endpoint));
-    acc.reserve(entries.len());
+
+    let mut files = LinkedList::new();
+
     for entry in entries {
       if entry.is_directory() {
-        try!(list_rec(&client, &entry.path(), &mut acc));
+        files.append(&mut try!(list_rec(&client, &entry.path())));
       } else {
-        acc.push(entry);
+        files.push_back(entry);
       }
     }
-    Ok(())
+    Ok(files)
   }
 
-  let mut entries = vec![];
-  try!(list_rec(&client, "/DCIM", &mut entries));
+  let entries = try!(list_rec(&client, "/DCIM")).into_iter().collect();
   Ok(entries)
 }
 
