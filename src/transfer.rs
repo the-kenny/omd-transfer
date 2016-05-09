@@ -23,10 +23,9 @@ pub struct TransferItem {
 }
 
 fn parse_fat_datetime(date: u16, time: u16) -> NaiveDateTime {
-  let day   =  date      & 0b00011111;
-  let month =  date >> 5 & 0b00001111;
-  let year  = (date >> 9 & 0b01111111) + 1980;
-
+  let day     =  date       & 0b00011111;
+  let month   =  date >> 5  & 0b00001111;
+  let year    = (date >> 9  & 0b01111111) + 1980;
   let seconds = (time       & 0b00011111) * 2;
   let minutes =  time >> 5  & 0b00111111;
   let hours   =  time >> 11 & 0b00011111;
