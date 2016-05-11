@@ -150,85 +150,70 @@ fn list_items(client: &Client) -> Result<Vec<TransferItem>> {
   Ok(entries)
 }
 
-fn list_transfer_order(client: &Client) -> Result<Vec<TransferItem>> {
-  request_list(&client, "get_rsvimglist.cgi")
+pub trait Transfer: Sized {
+  fn from_config(c: &Config) -> Option<Self>;
+  fn download_directory(&self) -> &PathBuf;
+  
+  fn items(&self, client: &Client) -> Result<Vec<TransferItem>>;
+  fn item_downloaded(&self, _item: &TransferItem) -> Result<()> { Ok(()) }
 }
 
-pub struct Transfer {
+pub fn execute_transfer<T: Transfer>(transfer: T, strategy: ErrorStrategy) -> Result<()> {
+  let client = Client::new();
+  
+  let entries = try!(transfer.items(&client));
+  let dir = transfer.download_directory().to_path_buf();
+
+  for entry in entries {
+    let mut target = dir.clone();
+    target.push(&entry.filename);
+    info!("Downloading {} to {:?}", entry.filename, target);
+    
+    let result = entry.download(&client, &target);
+    if result.is_err() {
+      warn!("Failed to download {}", entry.filename);
+      if strategy == ErrorStrategy::Abort {
+        return result;
+      };
+    };
+    
+    try!(transfer.item_downloaded(&entry))
+  }
+
+  Ok(())
+}
+
+pub struct OrderTransfer {
+  download_dir: PathBuf
+}
+
+impl Transfer for OrderTransfer {
+  fn from_config(c: &Config) -> Option<Self> {
+    c.transfer_order_dir.as_ref().map(|d| OrderTransfer {
+      download_dir: d.clone()
+    })
+  }
+  
+  fn download_directory(&self) -> &PathBuf {
+    &self.download_dir
+  }
+  
+  fn items(&self, client: &Client) -> Result<Vec<TransferItem>> {
+    debug!("Checking for transfer order...");
+    let entries = try!(request_list(&client, "get_rsvimglist.cgi"));
+    info!("Got {} items in transfer order", entries.len());
+    Ok(entries)
+  }
+}
+
+pub struct IncrementalTransfer {
   download_dir: PathBuf,
   state_file: PathBuf,
-  error_strategy: ErrorStrategy,
-  http_client: Client,
 }
 
 const DATE_FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S";
 
-impl Transfer {
-  pub fn from_config(config: &Config) -> Option<Self> {
-    config.download_dir.clone().map(|download_dir| {
-      // TODO: Allow users to specify separate path via config
-      let mut state_file = download_dir.clone();
-      state_file.push("omd-downloader.state");
-
-      Transfer {
-        download_dir: download_dir,
-        state_file: state_file,
-        error_strategy: config.error_strategy,
-        http_client: Client::new(),
-      }
-    })
-  }
-
-  pub fn download_new(&self) -> Result<()> {
-    let last_downloaded = self.last_download_date();
-    let entries = try!(list_items(&self.http_client));
-    let entries: Vec<_> = match last_downloaded {
-      None => entries.iter().collect(),
-      Some(date) => entries.iter()
-        .filter(|e| e.date > date)
-        .collect()
-    };
-
-    info!("Got {} files to download", entries.len());
-
-    for entry in entries {
-      let mut target = self.download_dir.clone();
-      target.push(&entry.filename);
-      info!("Downloading {} to {:?}", entry.filename, target);
-      
-      let result = entry.download(&self.http_client, &target);
-      if result.is_err() {
-        warn!("Failed to download {}", entry.filename);
-        if self.error_strategy == ErrorStrategy::Abort {
-          return result;
-        };
-      };
-      
-      try!(self.store_download_date(&entry.date));
-    }
-
-    Ok(())
-  }
-
-  // pub fn download_transfer_order(&self) -> Result<()> {
-  //   let download_dir = self.config.transfer_order_dir.clone()
-  //     .expect("No transfer_order_directory configured");
-  
-  //   debug!("Checking for transfer order...");
-  //   let entries = try!(request_list(&self.http_client, "get_rsvimglist.cgi"));
-  //   info!("Got {} items in transfer order", entries.len());
-
-  //   for entry in entries {
-  //     let mut target = download_dir
-  //       .clone();
-  //     target.push(&entry.filename);
-  //     info!("Downloading {} to {:?}", entry.filename, target);
-  //     try!(entry.download(&self.http_client, &target));
-  //   }
-
-  //   Ok(())
-  // }
-
+impl IncrementalTransfer {
   fn last_download_date(&self) -> Option<NaiveDateTime> {
     use std::io::ErrorKind;
     match File::open(&self.state_file) {
@@ -249,6 +234,45 @@ impl Transfer {
     let mut f = try!(File::create(&self.state_file));
     try!(f.write_fmt(format_args!("{}", date.format(DATE_FORMAT))));
     try!(f.sync_all());
+    Ok(())
+  }  
+}
+
+impl Transfer for IncrementalTransfer {
+  fn from_config(c: &Config) -> Option<Self> {
+    c.download_dir.as_ref().map(|dir| {
+      let mut state_file = dir.clone();
+      state_file.push("omd-downloader.state");
+
+      IncrementalTransfer {
+        download_dir: dir.clone(),
+        state_file: state_file,
+      }
+    })
+  }
+  
+  fn download_directory(&self) -> &PathBuf {
+    &self.download_dir
+  }
+  
+  fn items(&self, client: &Client) -> Result<Vec<TransferItem>> {
+    let last_downloaded = self.last_download_date();
+    let entries = try!(list_items(&client));
+
+    let entries: Vec<_> = match last_downloaded {
+      None => entries.into_iter().collect(),
+      Some(date) => entries.into_iter()
+        .filter(|e| e.date > date)
+        .collect()
+    };
+
+    info!("Got {} files to download", entries.len());
+    Ok(entries)
+  }
+
+  fn item_downloaded(&self, item: &TransferItem) -> Result<()> {
+    try!(self.store_download_date(&item.date));
+
     Ok(())
   }
 }

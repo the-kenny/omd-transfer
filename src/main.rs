@@ -8,10 +8,15 @@ fn main() {
 
   let config = Config {
     download_dir: Some("foo/".into()),
-    transfer_order_dir: None,
+    transfer_order_dir: Some("transfer_order/".into()),
     error_strategy: ErrorStrategy::Abort,
   };
+
+  OrderTransfer::from_config(&config).map(|transfer| {
+    execute_transfer(transfer, config.error_strategy).unwrap();
+  });
   
-  let transfer = Transfer::from_config(&config).unwrap();
-  transfer.download_new().expect("Download failed");
+  IncrementalTransfer::from_config(&config).map(|transfer| {
+    execute_transfer(transfer, config.error_strategy).unwrap();
+  });
 }
