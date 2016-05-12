@@ -167,7 +167,7 @@ pub fn execute_transfer<T: Transfer>(transfer: T, strategy: ErrorStrategy) -> Re
   for entry in entries {
     let mut target = dir.clone();
     target.push(&entry.filename);
-    info!("Downloading {} to {:?}", entry.filename, target);
+    println!("Downloading {} to {:?}", entry.filename, target);
     
     let result = entry.download(&client, &target);
     if result.is_err() {
@@ -201,7 +201,7 @@ impl Transfer for OrderTransfer {
   fn items(&self, client: &Client) -> Result<Vec<TransferItem>> {
     debug!("Checking for transfer order...");
     let entries = try!(request_list(&client, "get_rsvimglist.cgi"));
-    info!("Got {} items in transfer order", entries.len());
+    println!("Got {} items in transfer order", entries.len());
     Ok(entries)
   }
 }
@@ -224,7 +224,7 @@ impl IncrementalTransfer {
         f.read_to_string(&mut buf).expect("Failed to read from state file");
         let date = NaiveDateTime::parse_from_str(&buf.trim(), DATE_FORMAT)
           .expect("Corrup history file");
-        info!("read date from state file: {}", date);
+        debug!("read date from state file: {}", date);
         Some(date)
       }
     }
@@ -266,7 +266,7 @@ impl Transfer for IncrementalTransfer {
         .collect()
     };
 
-    info!("Got {} files to download", entries.len());
+    println!("Got {} new files to download", entries.len());
     Ok(entries)
   }
 
