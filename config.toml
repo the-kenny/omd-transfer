@@ -1,0 +1,8 @@
+error_strategy = "abort"
+# error_strategy = "continue"
+
+[transfer_order]
+download_directory = "transfer_order/"
+
+[incremental]
+download_directory = "incremental/"

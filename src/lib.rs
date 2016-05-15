@@ -1,9 +1,10 @@
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 
-extern crate hyper;
 extern crate chrono;
+extern crate hyper;
 extern crate regex;
+extern crate toml;
 
 pub mod config;
 pub mod error;

@@ -5,11 +5,11 @@ authors = ["Moritz Ulrich <moritz@tarn-vedra.de>"]
 
 [dependencies]
 chrono = "0.2.22"
+env_logger = "0.3.3"
 lazy_static = "0.2.1"
 log = "0.3.6"
 regex = "0.1"
-env_logger = "0.3.3"
-
+toml = "0.1.28"
 
 [dependencies.hyper]
 version = "0.9.1"
