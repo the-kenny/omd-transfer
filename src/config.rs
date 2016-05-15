@@ -69,11 +69,11 @@ impl Config {
 
     
     let incremental_dir = conf.lookup("incremental.download_directory")
-      .map(toml::Value::to_string)
+      .and_then(toml::Value::as_str)
       .map(PathBuf::from);
 
     let transfer_order_dir = conf.lookup("transfer_order.download_directory")
-      .map(toml::Value::to_string)
+      .and_then(toml::Value::as_str)
       .map(PathBuf::from);
 
     Config {
