@@ -43,6 +43,9 @@ pub struct Config {
 
   pub error_strategy: ErrorStrategy,
   pub overwrite_strategy: OverwriteStrategy,
+
+  pub power_off: bool,
+
 }
 
 impl Config {
@@ -67,7 +70,7 @@ impl Config {
       .and_then(OverwriteStrategy::from_str)
       .expect("Invalid overwrite_strategy");
 
-    
+
     let incremental_dir = conf.lookup("incremental.download_directory")
       .and_then(toml::Value::as_str)
       .map(PathBuf::from);
@@ -76,11 +79,18 @@ impl Config {
       .and_then(toml::Value::as_str)
       .map(PathBuf::from);
 
+    let power_off = conf.lookup("power_off")
+      .and_then(toml::Value::as_bool)
+      .expect("`power_off` not found in config file");
+
+
     Config {
       download_dir: incremental_dir,
       transfer_order_dir: transfer_order_dir,
       error_strategy: error_strategy,
       overwrite_strategy: overwrite_strategy,
+
+      power_off: power_off,
     }
   }
 }

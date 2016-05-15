@@ -177,6 +177,15 @@ pub trait Transfer: Sized {
   fn item_downloaded(&self, _item: &TransferItem) -> Result<()> { Ok(()) }
 }
 
+pub fn power_off() -> Result<()> {
+  let mut url = BASE_URL.to_string();
+  url.push_str("exec_pwoff.cgi");
+  debug!("GET {}", url);
+
+  try!(Client::new().get(&url).send());
+  Ok(())
+}
+
 pub fn execute_transfer<T: Transfer>(transfer: T, config: &Config) -> Result<()> {
   let client = Client::new();
 
