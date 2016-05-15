@@ -153,14 +153,14 @@ fn list_items(client: &Client) -> Result<Vec<TransferItem>> {
 pub trait Transfer: Sized {
   fn from_config(c: &Config) -> Option<Self>;
   fn download_directory(&self) -> &PathBuf;
-  
+
   fn items(&self, client: &Client) -> Result<Vec<TransferItem>>;
   fn item_downloaded(&self, _item: &TransferItem) -> Result<()> { Ok(()) }
 }
 
 pub fn execute_transfer<T: Transfer>(transfer: T, strategy: ErrorStrategy) -> Result<()> {
   let client = Client::new();
-  
+
   let entries = try!(transfer.items(&client));
   let dir = transfer.download_directory().to_path_buf();
 
@@ -168,7 +168,7 @@ pub fn execute_transfer<T: Transfer>(transfer: T, strategy: ErrorStrategy) -> Re
     let mut target = dir.clone();
     target.push(&entry.filename);
     println!("Downloading {} to {:?}", entry.filename, target);
-    
+
     let result = entry.download(&client, &target);
     if result.is_err() {
       warn!("Failed to download {}", entry.filename);
@@ -176,7 +176,7 @@ pub fn execute_transfer<T: Transfer>(transfer: T, strategy: ErrorStrategy) -> Re
         return result;
       };
     };
-    
+
     try!(transfer.item_downloaded(&entry))
   }
 
@@ -193,13 +193,13 @@ impl Transfer for OrderTransfer {
       download_dir: d.clone()
     })
   }
-  
+
   fn download_directory(&self) -> &PathBuf {
     &self.download_dir
   }
-  
+
   fn items(&self, client: &Client) -> Result<Vec<TransferItem>> {
-    debug!("Checking for transfer order...");
+    println!("Checking for transfer order items...");
     let entries = try!(request_list(&client, "get_rsvimglist.cgi"));
     println!("Got {} items in transfer order", entries.len());
     Ok(entries)
@@ -235,7 +235,7 @@ impl IncrementalTransfer {
     try!(f.write_fmt(format_args!("{}", date.format(DATE_FORMAT))));
     try!(f.sync_all());
     Ok(())
-  }  
+  }
 }
 
 impl Transfer for IncrementalTransfer {
@@ -250,12 +250,14 @@ impl Transfer for IncrementalTransfer {
       }
     })
   }
-  
+
   fn download_directory(&self) -> &PathBuf {
     &self.download_dir
   }
-  
+
   fn items(&self, client: &Client) -> Result<Vec<TransferItem>> {
+    println!("Checking for new files...");
+
     let last_downloaded = self.last_download_date();
     let entries = try!(list_items(&client));
 
