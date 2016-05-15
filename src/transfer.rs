@@ -84,7 +84,7 @@ impl TransferItem {
     if Path::new(&tmp).exists() {
       use OverwriteStrategy::*;
       
-      info!("Target {} already exists. {}", tmp, match strategy {
+      println!("Target {} already exists. {}", tmp, match strategy {
         Skip => "Skipping",
         Overwrite => "Replacing",
       });
@@ -182,6 +182,7 @@ pub fn execute_transfer<T: Transfer>(transfer: T, config: &Config) -> Result<()>
 
   let entries = try!(transfer.items(&client));
   let dir = transfer.download_directory().to_path_buf();
+  try!(fs::create_dir_all(&dir));
 
   for entry in entries {
     let mut target = dir.clone();
