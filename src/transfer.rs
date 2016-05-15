@@ -69,13 +69,32 @@ impl TransferItem {
     format!("{}/{}", self.parent, self.filename)
   }
 
-  pub fn download<P: AsRef<Path>>(&self, client: &Client, target: &P) -> Result<()> {
+  pub fn download<P: AsRef<Path>>(&self,
+                                  client: &Client,
+                                  target: &P,
+                                  strategy: OverwriteStrategy) -> Result<()> {
     let url = format!("{}{}", BASE_URL, self.path());
     debug!("Fetching {}", url);
     let mut res = try!(client.get(&url).send());
     assert_eq!(res.status, StatusCode::Ok);
 
     let mut tmp = target.as_ref().to_str().unwrap().to_string();
+
+    // Implement overwrite strategy
+    if Path::new(&tmp).exists() {
+      use OverwriteStrategy::*;
+      
+      info!("Target {} already exists. {}", tmp, match strategy {
+        Skip => "Skipping",
+        Overwrite => "Replacing",
+      });
+      
+      match strategy {
+        Skip => return Ok(()),
+        Overwrite => (),
+      }
+    }
+    
     tmp.push_str(".incomplete");
 
     {
@@ -158,7 +177,7 @@ pub trait Transfer: Sized {
   fn item_downloaded(&self, _item: &TransferItem) -> Result<()> { Ok(()) }
 }
 
-pub fn execute_transfer<T: Transfer>(transfer: T, strategy: ErrorStrategy) -> Result<()> {
+pub fn execute_transfer<T: Transfer>(transfer: T, config: &Config) -> Result<()> {
   let client = Client::new();
 
   let entries = try!(transfer.items(&client));
@@ -169,10 +188,10 @@ pub fn execute_transfer<T: Transfer>(transfer: T, strategy: ErrorStrategy) -> Re
     target.push(&entry.filename);
     println!("Downloading {} to {:?}", entry.filename, target);
 
-    let result = entry.download(&client, &target);
+    let result = entry.download(&client, &target, config.overwrite_strategy);
     if result.is_err() {
       warn!("Failed to download {}", entry.filename);
-      if strategy == ErrorStrategy::Abort {
+      if config.error_strategy == ErrorStrategy::Abort {
         return result;
       };
     };

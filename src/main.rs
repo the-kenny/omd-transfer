@@ -13,10 +13,10 @@ fn main() {
   let config = Config::from_file(&config_file);
   
   OrderTransfer::from_config(&config).map(|transfer| {
-    execute_transfer(transfer, config.error_strategy).unwrap();
+    execute_transfer(transfer, &config).unwrap();
   });
   
   IncrementalTransfer::from_config(&config).map(|transfer| {
-    execute_transfer(transfer, config.error_strategy).unwrap();
+    execute_transfer(transfer, &config).unwrap();
   });
 }

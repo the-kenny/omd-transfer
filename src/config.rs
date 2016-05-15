@@ -4,18 +4,34 @@ use std::fs::File;
 
 use toml;
 
-#[derive(PartialEq,Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum ErrorStrategy {
   Abort,
   Continue,
 }
 
 impl ErrorStrategy {
-  fn from_str(v: &str) -> Option<ErrorStrategy> {
+  fn from_str(v: &str) -> Option<Self> {
     match v {
       "abort"    => Some(ErrorStrategy::Abort),
       "continue" => Some(ErrorStrategy::Continue),
       _ => None
+    }
+  }
+}
+
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum OverwriteStrategy {
+  Overwrite,
+  Skip,
+}
+
+impl OverwriteStrategy {
+  fn from_str(v: &str) -> Option<Self> {
+    match v {
+      "overwrite" => Some(OverwriteStrategy::Overwrite),
+      "skip"      => Some(OverwriteStrategy::Skip),
+      _           => None
     }
   }
 }
@@ -26,18 +42,10 @@ pub struct Config {
   pub transfer_order_dir: Option<PathBuf>,
 
   pub error_strategy: ErrorStrategy,
+  pub overwrite_strategy: OverwriteStrategy,
 }
 
 impl Config {
-  pub fn new() -> Self {
-    Config {
-      download_dir: Some("downloaded/".into()),
-      transfer_order_dir: Some("transfer_order/".into()),
-
-      error_strategy: ErrorStrategy::Abort,
-    }
-  }
-
   pub fn from_file<P: AsRef<Path>>(file: P) -> Self {
     let conf: toml::Value = {
       let mut buf = String::new();
@@ -53,6 +61,13 @@ impl Config {
       .and_then(ErrorStrategy::from_str)
       .expect("Invalid error_strategy");
 
+    let overwrite_strategy = conf.lookup("overwrite_strategy")
+      .expect("`overwrite_strategy` not found in config file")
+      .as_str()
+      .and_then(OverwriteStrategy::from_str)
+      .expect("Invalid overwrite_strategy");
+
+    
     let incremental_dir = conf.lookup("incremental.download_directory")
       .map(toml::Value::to_string)
       .map(PathBuf::from);
@@ -64,7 +79,8 @@ impl Config {
     Config {
       download_dir: incremental_dir,
       transfer_order_dir: transfer_order_dir,
-      error_strategy: error_strategy
+      error_strategy: error_strategy,
+      overwrite_strategy: overwrite_strategy,
     }
   }
 }

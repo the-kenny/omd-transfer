@@ -1,6 +1,9 @@
 error_strategy = "abort"
 # error_strategy = "continue"
 
+overwrite_strategy = "skip"
+# overwrite_strategy = "overwrite"
+
 [transfer_order]
 download_directory = "transfer_order/"
 
