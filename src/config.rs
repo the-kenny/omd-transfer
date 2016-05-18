@@ -50,6 +50,8 @@ pub struct Config {
 
 impl Config {
   pub fn from_file<P: AsRef<Path>>(file: P) -> Self {
+    info!("Loading config from {}", file.as_ref().display());
+
     let conf: toml::Value = {
       let mut buf = String::new();
       let mut file = File::open(file).expect("Failed to parse config!");
@@ -92,5 +94,9 @@ impl Config {
 
       power_off: power_off,
     }
+  }
+
+  pub fn template() -> &'static str {
+    include_str!("../config.template.toml")
   }
 }

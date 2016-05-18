@@ -10,6 +10,7 @@ lazy_static = "0.2.1"
 log = "0.3.6"
 regex = "0.1"
 toml = "0.1.28"
+getopts = "0.2"
 
 [dependencies.hyper]
 version = "0.9.1"
