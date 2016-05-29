@@ -6,12 +6,35 @@ extern crate getopts;
 use omd_transfer::*;
 
 use getopts::Options;
-use std::env;
+use std::{env, fs, io, process};
+use std::io::{Write,ErrorKind};
 use std::path::PathBuf;
 
 fn print_usage(program: &str, opts: Options) {
   let brief = format!("Usage: {} [options]", program);
   print!("{}", opts.usage(&brief));
+}
+
+fn write_usage() -> io::Result<()> {
+  let file = fs::OpenOptions::new()
+    .write(true)
+    .create_new(true)
+    .open("config.toml");
+
+  match file {
+    Ok(mut file) => {
+      try!(file.write_all(Config::template().as_bytes()));
+      Ok(())
+    },
+    Err(e) => {
+      if e.kind() == ErrorKind::AlreadyExists {
+        println!("config.toml already exists.");
+        process::exit(1);
+      } else {
+        Err(e)
+      }
+    }
+  }
 }
 
 fn main() {
@@ -21,7 +44,8 @@ fn main() {
   let program = args[0].clone();
 
   let mut opts = Options::new();
-  opts.optopt("c", "config", "Config file to use", "FILE");
+  opts.optopt("c", "config", "Config file to use. Defaults to ./config.toml", "FILE");
+  opts.optflag("t", "write-template", "Print config template to stdout");
   opts.optflag("h", "help", "print this help menu");
   let matches = match opts.parse(&args[1..]) {
     Ok(m) => { m }
@@ -30,6 +54,12 @@ fn main() {
 
   if matches.opt_present("h") {
     print_usage(&program, opts);
+    return;
+  }
+
+  if matches.opt_present("t") {
+    write_usage().expect("Failed to write config template");
+    println!("Wrote config template to config.toml");
     return;
   }
 

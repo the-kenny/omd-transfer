@@ -1,0 +1,14 @@
+error_strategy = "abort"
+# error_strategy = "continue"
+
+overwrite_strategy = "skip"
+# overwrite_strategy = "overwrite"
+
+power_off = false
+# power_off = true
+
+[transfer_order]
+download_directory = "transfer_order/"
+
+[incremental]
+download_directory = "incremental/"
