@@ -1,3 +1,5 @@
+#![feature(box_syntax, box_patterns)]
+
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 
@@ -13,3 +15,10 @@ pub mod transfer;
 pub use transfer::*;
 pub use error::*;
 pub use config::*;
+
+#[cfg(feature = "dbus")]
+extern crate dbus;
+#[cfg(feature = "dbus")]
+pub mod wifi;
+#[cfg(feature = "dbus")]
+pub use wifi::*;

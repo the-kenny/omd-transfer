@@ -3,6 +3,9 @@ name = "omd_transfer"
 version = "0.1.0"
 authors = ["Moritz Ulrich <moritz@tarn-vedra.de>"]
 
+[features]
+default = ["dbus"]
+
 [dependencies]
 chrono = "0.2.22"
 env_logger = "0.3.3"
@@ -16,3 +19,7 @@ getopts = "0.2"
 version = "0.9.1"
 default-features = false
 features = []
+
+[dependencies.dbus]
+version = "*"
+optional = true

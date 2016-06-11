@@ -40,53 +40,55 @@ fn write_usage() -> io::Result<()> {
 fn main() {
   env_logger::init().unwrap();
 
-  let args: Vec<String> = env::args().collect();
-  let program = args[0].clone();
+  omd_transfer::wifi::test_dbus();
+  
+  // let args: Vec<String> = env::args().collect();
+  // let program = args[0].clone();
 
-  let mut opts = Options::new();
-  opts.optopt("c", "config", "Config file to use. Defaults to ./config.toml", "FILE");
-  opts.optflag("t", "write-template", "Print config template to stdout");
-  opts.optflag("h", "help", "print this help menu");
-  let matches = match opts.parse(&args[1..]) {
-    Ok(m) => { m }
-    Err(f) => { panic!(f.to_string()) }
-  };
+  // let mut opts = Options::new();
+  // opts.optopt("c", "config", "Config file to use. Defaults to ./config.toml", "FILE");
+  // opts.optflag("t", "write-template", "Print config template to stdout");
+  // opts.optflag("h", "help", "print this help menu");
+  // let matches = match opts.parse(&args[1..]) {
+  //   Ok(m) => { m }
+  //   Err(f) => { panic!(f.to_string()) }
+  // };
 
-  if matches.opt_present("h") {
-    print_usage(&program, opts);
-    return;
-  }
+  // if matches.opt_present("h") {
+  //   print_usage(&program, opts);
+  //   return;
+  // }
 
-  if matches.opt_present("t") {
-    write_usage().expect("Failed to write config template");
-    println!("Wrote config template to config.toml");
-    return;
-  }
+  // if matches.opt_present("t") {
+  //   write_usage().expect("Failed to write config template");
+  //   println!("Wrote config template to config.toml");
+  //   return;
+  // }
 
-  let config_file: PathBuf = matches.opt_str("c")
-    .or(env::var("OMD_TRANSFER_CONFIG").ok())
-    .unwrap_or("config.toml".into())
-    .into();
+  // let config_file: PathBuf = matches.opt_str("c")
+  //   .or(env::var("OMD_TRANSFER_CONFIG").ok())
+  //   .unwrap_or("config.toml".into())
+  //   .into();
 
-  if !config_file.exists() {
-    println!("File {} not found", config_file.display());
-    return;
-  }
+  // if !config_file.exists() {
+  //   println!("File {} not found", config_file.display());
+  //   return;
+  // }
 
-  let config = Config::from_file(&config_file);
+  // let config = Config::from_file(&config_file);
 
-  OrderTransfer::from_config(&config).map(|transfer| {
-    info!("Starting to execute transfer order");
-    execute_transfer(transfer, &config).unwrap();
-  });
+  // OrderTransfer::from_config(&config).map(|transfer| {
+  //   info!("Starting to execute transfer order");
+  //   execute_transfer(transfer, &config).unwrap();
+  // });
 
-  IncrementalTransfer::from_config(&config).map(|transfer| {
-    info!("Starting to execute incremental transfer");
-    execute_transfer(transfer, &config).unwrap();
-  });
+  // IncrementalTransfer::from_config(&config).map(|transfer| {
+  //   info!("Starting to execute incremental transfer");
+  //   execute_transfer(transfer, &config).unwrap();
+  // });
 
-  if config.power_off {
-    println!("Powering off...");
-    power_off().expect("Failed to power off the cmaera");
-  }
+  // if config.power_off {
+  //   println!("Powering off...");
+  //   power_off().expect("Failed to power off the cmaera");
+  // }
 }
