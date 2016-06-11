@@ -2,89 +2,206 @@ use dbus::*;
 // use dbus::arg::*;
 // use dbus::obj::*;
 
-pub fn test_dbus() {
-  let c = Connection::get_private(BusType::System).unwrap();
-
-  let interface_name = "wlp3s0";
-  let network_name = "E-M10MKII-P-BHLA37440";
-  
-  if let Some(interface) = get_interface(&c, interface_name) {
-    println!("Found interface!");
-      
-    let current_network = current_network(&c, &interface);
-    println!("{:?}", current_network);
-
-    let camera_network = find_network(&c, &interface, network_name);
-    println!("{:?}", camera_network);
-  }
+struct WifiInterface<'a> {
+  conn: &'a Connection,
+  path: Path<'a>,
+  props: Props<'a>,
 }
 
-fn associate_network<'a>(conn: &'a Connection, network: &)
+impl<'a> WifiInterface<'a> {
+  fn find(conn: &'a Connection, interface_name: &str) -> Option<Self> {
+    let p = Props::new(&conn,
+                       "fi.w1.wpa_supplicant1",
+                       "/fi/w1/wpa_supplicant1",
+                       "fi.w1.wpa_supplicant1",
+                       1000);
 
-fn current_network<'a>(conn: &'a Connection, interface: &Props<'a>) -> Option<Path<'a>> {
-  if let Ok(MessageItem::ObjectPath(network)) = interface.get("CurrentNetwork") {
-    Some(network)
-  } else {
-    None
-  }
-}
+    if let Ok(MessageItem::Array(interfaces, _)) = p.get("Interfaces") {
+      for path in interfaces {
+        if let MessageItem::ObjectPath(path) = path {
+          let ip = Props::new(&conn,
+                              "fi.w1.wpa_supplicant1",
+                              path.clone(),
+                              "fi.w1.wpa_supplicant1.Interface",
+                              1000);
 
-fn find_network<'a>(conn: &'a Connection,
-                    interface: &Props<'a>,
-                    network_name: &str) -> Option<Path<'a>> {
-  use dbus::MessageItem::*;
-
-  let network_name = format!("\"{}\"", network_name);
-  
-  if let Ok(Array(networks, _)) = interface.get("Networks") {
-    for network in networks {
-      if let MessageItem::ObjectPath(network) = network {
-        let p = Props::new(conn,
-                           "fi.w1.wpa_supplicant1",
-                           network.clone(),
-                           "fi.w1.wpa_supplicant1.Network",
-                           100);
-        if let Ok(Array(props, _)) = p.get("Properties") {
-          for prop in props {
-            if let DictEntry(box Str(prop_name), box Variant(box Str(prop_val))) = prop {
-              println!("{}: {:?}", prop_name, prop_val);
-              if prop_name == "ssid" && prop_val == network_name {
-                return Some(network)
-              }
+          if let Ok(MessageItem::Str(ifname)) = ip.get("Ifname") {
+            if ifname == interface_name {
+              return Some(WifiInterface {
+                conn: conn,
+                path: path,
+                props: ip,
+              })
             }
           }
         }
       }
     }
+
+    None
   }
 
-  None
-}
+  fn current_network(&'a self) -> Option<WifiNetwork<'a>> {
+    if let Ok(MessageItem::ObjectPath(network)) = self.props.get("CurrentNetwork") {
+      Some(WifiNetwork::new(network, self))
+    } else {
+      None
+    }
+  }
 
-fn get_interface<'a>(conn: &'a Connection, interface_name: &str) -> Option<Props<'a>> {
-  let p = Props::new(conn,
-                     "fi.w1.wpa_supplicant1",
-                     "/fi/w1/wpa_supplicant1",
-                     "fi.w1.wpa_supplicant1",
-                     1000);
+  fn find_network(&'a self, name: &str) -> Option<WifiNetwork<'a>> {
+    use dbus::MessageItem::*;
 
+    let props = Props::new(&self.conn,
+                           "fi.w1.wpa_supplicant1",
+                           self.path.clone(),
+                           "fi.w1.wpa_supplicant1.Interface",
+                           1000);
 
-  if let Ok(MessageItem::Array(interfaces, _)) = p.get("Interfaces") {
-    for path in interfaces {
-      if let MessageItem::ObjectPath(path) = path {
-        let ip = Props::new(conn,
-                            "fi.w1.wpa_supplicant1",
-                            path,
-                            "fi.w1.wpa_supplicant1.Interface",
-                            1000);
-        if let Ok(MessageItem::Str(ifname)) = ip.get("Ifname") {
-          if ifname == interface_name {
-            return Some(ip)
+    if let Ok(Array(networks, _)) = props.get("Networks") {
+      for network in networks {
+        if let MessageItem::ObjectPath(network) = network {
+          let network = WifiNetwork::new(network, &self);
+          if network.ssid() == name {
+            return Some(network)
           }
         }
       }
     }
+
+    None
+  }
+}
+
+struct WifiNetwork<'a> {
+  path: Path<'a>,
+  interface: &'a WifiInterface<'a>,
+}
+
+impl<'a> WifiNetwork<'a> {
+  fn new(network: Path<'a>,
+         interface: &'a WifiInterface<'a>) -> Self {
+    WifiNetwork {
+      path: network,
+      interface: interface,
+    }
   }
 
-  None
+  fn ssid(&self) -> String {
+    use dbus::MessageItem::*;
+    let p = Props::new(self.interface.conn,
+                       "fi.w1.wpa_supplicant1",
+                       self.path.clone(),
+                       "fi.w1.wpa_supplicant1.Network",
+                       100);
+
+    if let Ok(Array(props, _)) = p.get("Properties") {
+      for prop in props {
+        if let DictEntry(box Str(prop_name), box Variant(box Str(prop_val))) = prop {
+          if prop_name == "ssid" {
+            let mut val = prop_val;
+            if val.starts_with("\"") { val.remove(0); }
+            if val.ends_with("\"") {
+              let len = val.len();
+              val.remove(len-1);
+            }
+            return val
+          }
+        }
+      }
+    }
+    unreachable!()
+  }
+
+  fn associate(&self) {
+    let msg = Message::new_method_call("fi.w1.wpa_supplicant1",
+                                       self.interface.path.clone(),
+                                       "fi.w1.wpa_supplicant1.Interface",
+                                       "SelectNetwork")
+      .unwrap()
+      .append1(self.path.clone());
+    self.interface.conn.send_with_reply_and_block(msg, 1000);
+
+  }
 }
+
+pub fn test_dbus() {
+  let c = Connection::get_private(BusType::System).unwrap();
+
+  let interface_name = "wlp3s0";
+  let network_name = "E-M10MKII-P-BHLA37440";
+
+  let interface = WifiInterface::find(&c, interface_name).unwrap();;
+  let original_network = interface.current_network().unwrap();
+  let camera_network = interface.find_network(&network_name).unwrap();
+
+  camera_network.associate();
+  original_network.associate();
+}
+
+// fn associate_network<'a>(conn: &'a Connection,
+//                          interface: &Props<'a>,
+//                          network: &Path) -> Option<()> {
+
+//   Some(())
+// }
+
+
+// fn current_network<'a>(conn: &'a Connection, interface: Path) -> Option<Path<'a>> {
+
+// }
+
+// fn find_network<'a>(conn: &'a Connection,
+//                     interface: &Props<'a>,
+//                     network_name: &str) -> Option<Path<'a>> {
+//   use dbus::MessageItem::*;
+
+//   let network_name = format!("\"{}\"", network_name);
+
+//   if let Ok(Array(networks, _)) = interface.get("Networks") {
+//     for network in networks {
+//       if let MessageItem::ObjectPath(network) = network {
+//         let p = Props::new(conn,
+//                            "fi.w1.wpa_supplicant1",
+//                            network.clone(),
+//                            "fi.w1.wpa_supplicant1.Network",
+//                            100);
+//         if let Ok(Array(props, _)) = p.get("Properties") {
+//           for prop in props {
+//             if let DictEntry(box Str(prop_name), box Variant(box Str(prop_val))) = prop {
+//               println!("{}: {:?}", prop_name, prop_val);
+//               if prop_name == "ssid" && prop_val == network_name {
+//                 return Some(network)
+//               }
+//             }
+//           }
+//         }
+//       }
+//     }
+//   }
+
+//   None
+// }
+
+// fn find_interface<'a>(conn: &'a Connection, interface_name: &str) -> Option<Path<'a>> {
+//   let p = Props::new(conn,
+//                      "fi.w1.wpa_supplicant1",
+//                      "/fi/w1/wpa_supplicant1",
+//                      "fi.w1.wpa_supplicant1",
+//                      1000);
+
+//   if let Ok(MessageItem::Array(interfaces, _)) = p.get("Interfaces") {
+//     for path in interfaces {
+//       if let MessageItem::ObjectPath(path) = path {
+//         let ip = interface_props(conn, &path);
+//         if let Ok(MessageItem::Str(ifname)) = ip.get("Ifname") {
+//           if ifname == interface_name {
+//             return Some(path)
+//           }
+//         }
+//       }
+//     }
+//   }
+
+//   None
+// }
