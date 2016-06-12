@@ -97,19 +97,20 @@ impl<'a> WifiNetwork<'a> {
 
     if let Ok(Array(props, _)) = p.get("Properties") {
       for prop in props {
-        if let DictEntry(prop, val) = prop {
-          let prop_name: &str = prop.as_ref().inner().unwrap();
-          let prop_val:  &str =  val.as_ref().inner().unwrap();
+        let (prop, val) = prop.inner().unwrap();
+        let prop_name: &str = prop.inner().unwrap();
 
-          if prop_name == "ssid" {
-            let mut val = prop_val.to_string();
-            if val.starts_with("\"") { val.remove(0); }
-            if val.ends_with("\"") {
-              let len = val.len();
-              val.remove(len-1);
-            }
-            return val
+        if prop_name == "ssid" {
+          println!("{:?}", val);
+          let val: &MessageItem = val.inner().unwrap();
+          let val: &str = val.inner().unwrap();
+          let mut val = val.to_string();
+          if val.starts_with("\"") { val.remove(0); }
+          if val.ends_with("\"") {
+            let len = val.len();
+            val.remove(len-1);
           }
+          return val
         }
       }
     }
@@ -123,8 +124,7 @@ impl<'a> WifiNetwork<'a> {
                                        "SelectNetwork")
       .unwrap()
       .append1(self.path.clone());
-    self.interface.conn.send_with_reply_and_block(msg, 1000);
-
+    self.interface.conn.send_with_reply_and_block(msg, 1000).unwrap();
   }
 }
 
@@ -139,5 +139,5 @@ pub fn test_dbus() {
   let camera_network = interface.find_network(&network_name).unwrap();
 
   camera_network.associate();
-  // original_network.associate();
+  original_network.associate();
 }
