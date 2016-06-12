@@ -1,7 +1,22 @@
-use dbus::*;
-use std::thread;
+use dbus;
+use dbus::{Connection,Path,Props,Message,BusType,MessageItem};
+use std::{result,thread};
 use std::time::Duration;
 use std::cell::RefCell;
+
+#[derive(Debug)]
+enum Error {
+  Timeout,
+  Dbus(dbus::Error),
+}
+
+impl From<dbus::Error> for Error {
+  fn from(other: dbus::Error) -> Self {
+    Error::Dbus(other)
+  }
+}
+
+type Result<T> = result::Result<T,Error>;
 
 struct WifiInterface<'a> {
   conn: &'a Connection,
@@ -50,16 +65,16 @@ impl<'a> WifiInterface<'a> {
     }
   }
 
-  fn state(&'a self) -> String {
+  fn state(&'a self) -> Result<String> {
     let props = Props::new(&self.conn,
                            "fi.w1.wpa_supplicant1",
                            self.path.clone(),
                            "fi.w1.wpa_supplicant1.Interface",
                            1000);
 
-    let state: MessageItem = props.get("State").unwrap();
+    let state: MessageItem = try!(props.get("State"));
     let state: &str = state.inner().unwrap();
-    state.to_string()
+    Ok(state.to_string())
   }
 
   fn find_network(&'a self, name: &str) -> Option<WifiNetwork<'a>> {
@@ -139,7 +154,7 @@ impl<'a> WifiNetwork<'a> {
   }
 
   // TODO: Result
-  fn associate(&self) {
+  fn associate(&self) -> Result<()> {
     println!("Associating with {}", self.ssid());
     
     let msg = Message::new_method_call("fi.w1.wpa_supplicant1",
@@ -148,21 +163,24 @@ impl<'a> WifiNetwork<'a> {
                                        "SelectNetwork")
       .unwrap()
       .append1(self.path.clone());
-    self.interface.conn.send_with_reply_and_block(msg, 1000).unwrap();
+    try!(self.interface.conn.send_with_reply_and_block(msg, 1000));
 
     let timeout = Duration::from_millis(10*1000);
     let sleep = Duration::from_millis(200);
 
     let mut spent = Duration::from_millis(0);
-    while self.interface.state() != "completed" {
+    while try!(self.interface.state()) != "completed" {
       println!("{:?}", self.interface.state());
       thread::sleep(sleep);
 
       spent += sleep;
-      if spent > timeout { panic!("Couldn't connect to {}", self.ssid()); }
+      if spent > timeout {
+        return Err(Error::Timeout)
+      }
     }
 
     println!("Connected!");
+    return Ok(())
   }
 }
 
@@ -181,6 +199,6 @@ pub fn test_dbus() {
   
   let camera_network = interface.find_network(&network_name).unwrap();
 
-  camera_network.associate();
-  original_network.associate();
+  camera_network.associate().unwrap();
+  original_network.associate().unwrap();
 }
