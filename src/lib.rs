@@ -1,5 +1,3 @@
-#![feature(box_syntax, box_patterns)]
-
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 
