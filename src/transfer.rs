@@ -83,18 +83,18 @@ impl TransferItem {
     // Implement overwrite strategy
     if Path::new(&tmp).exists() {
       use OverwriteStrategy::*;
-      
+
       println!("Target {} already exists. {}", tmp, match strategy {
         Skip => "Skipping",
         Overwrite => "Replacing",
       });
-      
+
       match strategy {
         Skip => return Ok(()),
         Overwrite => (),
       }
     }
-    
+
     tmp.push_str(".incomplete");
 
     {
@@ -187,6 +187,9 @@ pub fn power_off() -> Result<()> {
 }
 
 pub fn execute_transfer<T: Transfer>(transfer: T, config: &Config) -> Result<()> {
+  // TODO: Wait until camera is reachable
+
+
   let client = Client::new();
 
   let entries = try!(transfer.items(&client));

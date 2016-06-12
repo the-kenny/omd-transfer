@@ -153,8 +153,7 @@ impl<'a> WifiNetwork<'a> {
     unreachable!()
   }
 
-  // TODO: Result
-  fn associate(&self) -> Result<()> {
+  fn associate(&self, timeout: Duration) -> Result<()> {
     println!("Associating with {}", self.ssid());
     
     let msg = Message::new_method_call("fi.w1.wpa_supplicant1",
@@ -165,7 +164,6 @@ impl<'a> WifiNetwork<'a> {
       .append1(self.path.clone());
     try!(self.interface.conn.send_with_reply_and_block(msg, 1000));
 
-    let timeout = Duration::from_millis(10*1000);
     let sleep = Duration::from_millis(200);
 
     let mut spent = Duration::from_millis(0);
@@ -184,14 +182,10 @@ impl<'a> WifiNetwork<'a> {
   }
 }
 
-pub fn test_dbus() {
-  let c = Connection::get_private(BusType::System).unwrap();
-  // TODO
-  // let rule = "type='signal',interface='fi.w1.wpa_supplicant1.Interface'";
-  // c.add_match(rule).unwrap();
+pub fn with_temporary_network<F>(interface_name: &str, network_name: &str, f: F) -> ()
+  where F: FnOnce() -> () {
 
-  let interface_name = "wlp3s0";
-  let network_name = "E-M10MKII-P-BHLA37440";
+  let c = Connection::get_private(BusType::System).unwrap();
 
   let interface = WifiInterface::find(&c, interface_name).unwrap();
   let original_network = interface.current_network().unwrap();
@@ -199,6 +193,10 @@ pub fn test_dbus() {
   
   let camera_network = interface.find_network(&network_name).unwrap();
 
-  camera_network.associate().unwrap();
-  original_network.associate().unwrap();
+  let timeout = Duration::from_secs(10);
+  camera_network.associate(timeout).unwrap();
+    
+  f();
+  
+  original_network.associate(timeout).unwrap();
 }
