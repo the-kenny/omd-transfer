@@ -22,6 +22,7 @@ struct WifiInterface<'a> {
   conn: &'a Connection,
   path: Path<'a>,
   props: Props<'a>,
+  name: String,
 }
 
 impl<'a> WifiInterface<'a> {
@@ -47,6 +48,7 @@ impl<'a> WifiInterface<'a> {
                 conn: conn,
                 path: path,
                 props: ip,
+                name: interface_name.to_string(),
               })
             }
           }
@@ -98,6 +100,13 @@ impl<'a> WifiInterface<'a> {
     }
 
     None
+  }
+
+  pub fn is_up(&self) -> bool {
+    use get_if_addrs;
+    get_if_addrs::get_if_addrs().unwrap().iter()
+      .find(|i| i.name == self.name)
+      .is_some()
   }
 }
 
@@ -165,10 +174,8 @@ impl<'a> WifiNetwork<'a> {
     try!(self.interface.conn.send_with_reply_and_block(msg, 1000));
 
     let sleep = Duration::from_millis(200);
-
     let mut spent = Duration::from_millis(0);
     while try!(self.interface.state()) != "completed" {
-      println!("{:?}", self.interface.state());
       thread::sleep(sleep);
 
       spent += sleep;
@@ -177,14 +184,13 @@ impl<'a> WifiNetwork<'a> {
       }
     }
 
-    println!("Connected!");
+    println!("Associated!");
     return Ok(())
   }
 }
 
 pub fn with_temporary_network<F>(interface_name: &str, network_name: &str, f: F) -> ()
   where F: FnOnce() -> () {
-
   let c = Connection::get_private(BusType::System).unwrap();
 
   let interface = WifiInterface::find(&c, interface_name).unwrap();
@@ -193,10 +199,17 @@ pub fn with_temporary_network<F>(interface_name: &str, network_name: &str, f: F)
   
   let camera_network = interface.find_network(&network_name).unwrap();
 
-  let timeout = Duration::from_secs(10);
+  let timeout = Duration::from_secs(30);
   camera_network.associate(timeout).unwrap();
-    
+  println!("Waiting for camera to become available ({}s timeout)...",
+           timeout.as_secs());
+  while !interface.is_up() {
+    thread::sleep(Duration::from_millis(500));
+  }
+
+  // TODO: Use 1.10's new unwind-API
   f();
-  
+
+  println!("Reconnecting to old network...")
   original_network.associate(timeout).unwrap();
 }

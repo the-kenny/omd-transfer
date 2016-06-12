@@ -40,8 +40,6 @@ fn write_usage() -> io::Result<()> {
 fn main() {
   env_logger::init().unwrap();
 
-  // omd_transfer::wifi::test_dbus();
-  
   let args: Vec<String> = env::args().collect();
   let program = args[0].clone();
 

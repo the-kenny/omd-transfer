@@ -187,9 +187,6 @@ pub fn power_off() -> Result<()> {
 }
 
 pub fn execute_transfer<T: Transfer>(transfer: T, config: &Config) -> Result<()> {
-  // TODO: Wait until camera is reachable
-
-
   let client = Client::new();
 
   let entries = try!(transfer.items(&client));

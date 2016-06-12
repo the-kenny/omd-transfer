@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Moritz Ulrich <moritz@tarn-vedra.de>"]
 
 [features]
-default = ["dbus"]
+default = []
 
 [dependencies]
 chrono = "0.2.22"
@@ -14,9 +14,10 @@ log = "0.3.6"
 regex = "0.1"
 toml = "0.1.28"
 getopts = "0.2"
+get_if_addrs = "0.4"
 
 [dependencies.hyper]
-version = "0.9.1"
+version = "0.9"
 default-features = false
 features = []
 

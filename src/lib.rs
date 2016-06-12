@@ -5,6 +5,7 @@ extern crate chrono;
 extern crate hyper;
 extern crate regex;
 extern crate toml;
+extern crate get_if_addrs;
 
 pub mod config;
 pub mod error;
