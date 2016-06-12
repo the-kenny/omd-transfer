@@ -1,6 +1,7 @@
 use dbus::*;
-// use dbus::arg::*;
-// use dbus::obj::*;
+use std::thread;
+use std::time::Duration;
+use std::cell::RefCell;
 
 struct WifiInterface<'a> {
   conn: &'a Connection,
@@ -49,6 +50,18 @@ impl<'a> WifiInterface<'a> {
     }
   }
 
+  fn state(&'a self) -> String {
+    let props = Props::new(&self.conn,
+                           "fi.w1.wpa_supplicant1",
+                           self.path.clone(),
+                           "fi.w1.wpa_supplicant1.Interface",
+                           1000);
+
+    let state: MessageItem = props.get("State").unwrap();
+    let state: &str = state.inner().unwrap();
+    state.to_string()
+  }
+
   fn find_network(&'a self, name: &str) -> Option<WifiNetwork<'a>> {
     use dbus::MessageItem::*;
 
@@ -76,6 +89,7 @@ impl<'a> WifiInterface<'a> {
 struct WifiNetwork<'a> {
   path: Path<'a>,
   interface: &'a WifiInterface<'a>,
+  ssid: RefCell<Option<String>>,
 }
 
 impl<'a> WifiNetwork<'a> {
@@ -84,11 +98,18 @@ impl<'a> WifiNetwork<'a> {
     WifiNetwork {
       path: network,
       interface: interface,
+      ssid: RefCell::new(None),
     }
   }
 
   fn ssid(&self) -> String {
     use dbus::MessageItem::*;
+
+    match *self.ssid.borrow() {
+      Some(ref ssid) => return ssid.clone(),
+      _ => (),
+    }
+    
     let p = Props::new(self.interface.conn,
                        "fi.w1.wpa_supplicant1",
                        self.path.clone(),
@@ -101,7 +122,6 @@ impl<'a> WifiNetwork<'a> {
         let prop_name: &str = prop.inner().unwrap();
 
         if prop_name == "ssid" {
-          println!("{:?}", val);
           let val: &MessageItem = val.inner().unwrap();
           let val: &str = val.inner().unwrap();
           let mut val = val.to_string();
@@ -110,14 +130,18 @@ impl<'a> WifiNetwork<'a> {
             let len = val.len();
             val.remove(len-1);
           }
-          return val
+          *self.ssid.borrow_mut() = Some(val.clone());
+          return val;
         }
       }
     }
     unreachable!()
   }
 
+  // TODO: Result
   fn associate(&self) {
+    println!("Associating with {}", self.ssid());
+    
     let msg = Message::new_method_call("fi.w1.wpa_supplicant1",
                                        self.interface.path.clone(),
                                        "fi.w1.wpa_supplicant1.Interface",
@@ -125,17 +149,36 @@ impl<'a> WifiNetwork<'a> {
       .unwrap()
       .append1(self.path.clone());
     self.interface.conn.send_with_reply_and_block(msg, 1000).unwrap();
+
+    let timeout = Duration::from_millis(10*1000);
+    let sleep = Duration::from_millis(200);
+
+    let mut spent = Duration::from_millis(0);
+    while self.interface.state() != "completed" {
+      println!("{:?}", self.interface.state());
+      thread::sleep(sleep);
+
+      spent += sleep;
+      if spent > timeout { panic!("Couldn't connect to {}", self.ssid()); }
+    }
+
+    println!("Connected!");
   }
 }
 
 pub fn test_dbus() {
   let c = Connection::get_private(BusType::System).unwrap();
+  // TODO
+  // let rule = "type='signal',interface='fi.w1.wpa_supplicant1.Interface'";
+  // c.add_match(rule).unwrap();
 
   let interface_name = "wlp3s0";
   let network_name = "E-M10MKII-P-BHLA37440";
 
-  let interface = WifiInterface::find(&c, interface_name).unwrap();;
+  let interface = WifiInterface::find(&c, interface_name).unwrap();
   let original_network = interface.current_network().unwrap();
+  println!("Original network: {}", original_network.ssid());
+  
   let camera_network = interface.find_network(&network_name).unwrap();
 
   camera_network.associate();
