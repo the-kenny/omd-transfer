@@ -83,18 +83,18 @@ impl TransferItem {
     // Implement overwrite strategy
     if Path::new(&tmp).exists() {
       use OverwriteStrategy::*;
-      
+
       println!("Target {} already exists. {}", tmp, match strategy {
         Skip => "Skipping",
         Overwrite => "Replacing",
       });
-      
+
       match strategy {
         Skip => return Ok(()),
         Overwrite => (),
       }
     }
-    
+
     tmp.push_str(".incomplete");
 
     {

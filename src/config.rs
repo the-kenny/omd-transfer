@@ -37,6 +37,12 @@ impl OverwriteStrategy {
 }
 
 #[derive(Clone, Debug)]
+pub struct WifiConfig {
+  pub interface: String,
+  pub ssid: String,
+}
+
+#[derive(Clone, Debug)]
 pub struct Config {
   pub download_dir: Option<PathBuf>,
   pub transfer_order_dir: Option<PathBuf>,
@@ -46,6 +52,7 @@ pub struct Config {
 
   pub power_off: bool,
 
+  pub wifi: Option<WifiConfig>
 }
 
 impl Config {
@@ -85,6 +92,17 @@ impl Config {
       .and_then(toml::Value::as_bool)
       .expect("`power_off` not found in config file");
 
+    
+    let wifi = conf.lookup("wifi.interface")
+      .and_then(toml::Value::as_str)
+      .and_then(|i| {
+        conf.lookup("wifi.ssid")
+          .and_then(toml::Value::as_str)
+          .map(|s| WifiConfig {
+            ssid: s.into(),
+            interface: i.into(),
+          })
+      });
 
     Config {
       download_dir: incremental_dir,
@@ -93,6 +111,8 @@ impl Config {
       overwrite_strategy: overwrite_strategy,
 
       power_off: power_off,
+
+      wifi: wifi
     }
   }
 

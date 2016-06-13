@@ -75,18 +75,43 @@ fn main() {
 
   let config = Config::from_file(&config_file);
 
-  OrderTransfer::from_config(&config).map(|transfer| {
-    info!("Starting to execute transfer order");
-    execute_transfer(transfer, &config).unwrap();
-  });
+  let f = || {
+    OrderTransfer::from_config(&config).map(|transfer| {
+      info!("Starting to execute transfer order");
+      execute_transfer(transfer, &config).unwrap();
+    });
 
-  IncrementalTransfer::from_config(&config).map(|transfer| {
-    info!("Starting to execute incremental transfer");
-    execute_transfer(transfer, &config).unwrap();
-  });
+    IncrementalTransfer::from_config(&config).map(|transfer| {
+      info!("Starting to execute incremental transfer");
+      execute_transfer(transfer, &config).unwrap();
+    });
 
-  if config.power_off {
-    println!("Powering off...");
-    power_off().expect("Failed to power off the cmaera");
+    if config.power_off {
+      println!("Powering off...");
+      power_off().expect("Failed to power off the cmaera");
+    }
+  };
+
+  // Workaround for https://github.com/rust-lang/rust/issues/15701
+  run_transfers(&config, f);
+}
+
+#[cfg(not(feature = "dbus"))]
+fn run_transfers<F: FnOnce() -> ()>(config: &Config, f: F) {
+  if config.wifi.is_some() {
+    panic!("Found `wifi` section in config but compiled without DBUS support");
+  }
+
+  f()
+}
+
+#[cfg(feature = "dbus")]
+fn run_transfers<F: FnOnce() -> ()>(config: &Config, f: F) {
+  match config.wifi {
+    Some(ref config) => {
+      use omd_transfer::wifi;
+      wifi::with_temporary_network(&config, f)
+    },
+    None => f()
   }
 }

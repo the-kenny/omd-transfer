@@ -12,3 +12,7 @@ download_directory = "transfer_order/"
 
 [incremental]
 download_directory = "incremental/"
+
+# [wifi]
+# ssid = "E-M10MKII-P-BHLA00000"
+# interface = "wlp3s0"
