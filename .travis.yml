@@ -5,9 +5,9 @@ rust:
   - beta
   - nightly
 
+script:
+  - cargo build --verbose --features 'dbus'
+
 matrix:
   allow_failures:
     - rust: nightly
-  include:
-    - script: cargo build --verbose
-    - script: cargo build --verbose --features 'dbus'
