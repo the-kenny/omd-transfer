@@ -4,6 +4,8 @@ use std::{result,thread};
 use std::time::Duration;
 use std::cell::RefCell;
 
+use config::WifiConfig;
+
 #[derive(Debug)]
 enum Error {
   Timeout,
@@ -68,38 +70,38 @@ impl<'a> WifiInterface<'a> {
   }
 
   fn state(&'a self) -> Result<String> {
-    let props = Props::new(&self.conn,
-                           "fi.w1.wpa_supplicant1",
-                           self.path.clone(),
-                           "fi.w1.wpa_supplicant1.Interface",
-                           1000);
+  let props = Props::new(&self.conn,
+                         "fi.w1.wpa_supplicant1",
+                         self.path.clone(),
+                         "fi.w1.wpa_supplicant1.Interface",
+                         1000);
 
-    let state: MessageItem = try!(props.get("State"));
-    let state: &str = state.inner().unwrap();
-    Ok(state.to_string())
-  }
+  let state: MessageItem = try!(props.get("State"));
+  let state: &str = state.inner().unwrap();
+  Ok(state.to_string())
+}
 
-  fn find_network(&'a self, name: &str) -> Option<WifiNetwork<'a>> {
-    use dbus::MessageItem::*;
+fn find_network(&'a self, name: &str) -> Option<WifiNetwork<'a>> {
+use dbus::MessageItem::*;
 
-    let props = Props::new(&self.conn,
-                           "fi.w1.wpa_supplicant1",
-                           self.path.clone(),
-                           "fi.w1.wpa_supplicant1.Interface",
-                           1000);
+let props = Props::new(&self.conn,
+                       "fi.w1.wpa_supplicant1",
+                       self.path.clone(),
+                       "fi.w1.wpa_supplicant1.Interface",
+                       1000);
 
-    if let Ok(Array(networks, _)) = props.get("Networks") {
-      for network in networks {
-        if let MessageItem::ObjectPath(network) = network {
-          let network = WifiNetwork::new(network, &self);
-          if network.ssid() == name {
-            return Some(network)
-          }
-        }
+if let Ok(Array(networks, _)) = props.get("Networks") {
+  for network in networks {
+    if let MessageItem::ObjectPath(network) = network {
+      let network = WifiNetwork::new(network, &self);
+      if network.ssid() == name {
+        return Some(network)
       }
     }
+  }
+}
 
-    None
+None
   }
 
   pub fn is_up(&self) -> bool {
@@ -189,17 +191,19 @@ impl<'a> WifiNetwork<'a> {
   }
 }
 
-pub fn with_temporary_network<F>(interface_name: &str, network_name: &str, f: F) -> ()
+pub fn with_temporary_network<F>(config: &WifiConfig, f: F) -> ()
   where F: FnOnce() -> () {
   let c = Connection::get_private(BusType::System).unwrap();
 
-  let interface = WifiInterface::find(&c, interface_name).unwrap();
+  let interface = WifiInterface::find(&c, &config.interface).unwrap();
   let original_network = interface.current_network().unwrap();
   println!("Original network: {}", original_network.ssid());
   
-  let camera_network = interface.find_network(&network_name).unwrap();
+  let camera_network = interface.find_network(&config.ssid).unwrap();
 
+  // TODO: Make configurable
   let timeout = Duration::from_secs(30);
+  
   camera_network.associate(timeout).unwrap();
   println!("Waiting for camera to become available ({}s timeout)...",
            timeout.as_secs());

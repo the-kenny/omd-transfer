@@ -93,19 +93,25 @@ fn main() {
   };
 
   // Workaround for https://github.com/rust-lang/rust/issues/15701
-  run_transfers(f);
+  run_transfers(&config, f);
 }
 
 #[cfg(not(feature = "dbus"))]
-fn run_transfers<F: FnOnce() -> ()>(f: F) {
+fn run_transfers<F: FnOnce() -> ()>(config: &Config, f: F) {
+  if config.wifi.is_some() {
+    panic!("Found `wifi` section in config but compiled without DBUS support");
+  }
+
   f()
 }
 
 #[cfg(feature = "dbus")]
-fn run_transfers<F: FnOnce() -> ()>(f: F) {
-  let interface_name = "wlp3s0";
-  let network_name = "E-M10MKII-P-BHLA37440";
-
-  use omd_transfer::wifi;
-  wifi::with_temporary_network(interface_name, network_name, f)
+fn run_transfers<F: FnOnce() -> ()>(config: &Config, f: F) {
+  match config.wifi {
+    Some(ref config) => {
+      use omd_transfer::wifi;
+      wifi::with_temporary_network(&config, f)
+    },
+    None => f()
+  }
 }
