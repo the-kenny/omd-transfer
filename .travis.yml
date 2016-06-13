@@ -11,3 +11,12 @@ script:
 matrix:
   allow_failures:
     - rust: nightly
+
+# DBUS on default env is too old
+
+sudo: required
+dist: trusty
+
+before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install -qq libdbus-1-dev
