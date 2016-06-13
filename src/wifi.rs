@@ -210,6 +210,6 @@ pub fn with_temporary_network<F>(interface_name: &str, network_name: &str, f: F)
   // TODO: Use 1.10's new unwind-API
   f();
 
-  println!("Reconnecting to old network...")
+  println!("Reconnecting to old network...");
   original_network.associate(timeout).unwrap();
 }
