@@ -6,6 +6,8 @@ use std::cell::RefCell;
 
 use config::WifiConfig;
 
+const DBUS_TIMEOUT: i32 = 1000;
+
 #[derive(Debug)]
 enum Error {
   Timeout,
@@ -33,7 +35,7 @@ impl<'a> WifiInterface<'a> {
                        "fi.w1.wpa_supplicant1",
                        "/fi/w1/wpa_supplicant1",
                        "fi.w1.wpa_supplicant1",
-                       1000);
+                       DBUS_TIMEOUT);
 
     if let Ok(MessageItem::Array(interfaces, _)) = p.get("Interfaces") {
       for path in interfaces {
@@ -42,7 +44,7 @@ impl<'a> WifiInterface<'a> {
                               "fi.w1.wpa_supplicant1",
                               path.clone(),
                               "fi.w1.wpa_supplicant1.Interface",
-                              1000);
+                              DBUS_TIMEOUT);
 
           if let Ok(MessageItem::Str(ifname)) = ip.get("Ifname") {
             if ifname == interface_name {
@@ -74,7 +76,7 @@ impl<'a> WifiInterface<'a> {
                          "fi.w1.wpa_supplicant1",
                          self.path.clone(),
                          "fi.w1.wpa_supplicant1.Interface",
-                         1000);
+                         DBUS_TIMEOUT);
 
   let state: MessageItem = try!(props.get("State"));
   let state: &str = state.inner().unwrap();
@@ -88,7 +90,7 @@ let props = Props::new(&self.conn,
                        "fi.w1.wpa_supplicant1",
                        self.path.clone(),
                        "fi.w1.wpa_supplicant1.Interface",
-                       1000);
+                       DBUS_TIMEOUT);
 
 if let Ok(Array(networks, _)) = props.get("Networks") {
   for network in networks {
@@ -140,7 +142,7 @@ impl<'a> WifiNetwork<'a> {
                        "fi.w1.wpa_supplicant1",
                        self.path.clone(),
                        "fi.w1.wpa_supplicant1.Network",
-                       100);
+                       DBUS_TIMEOUT);
 
     if let Ok(Array(props, _)) = p.get("Properties") {
       for prop in props {
@@ -173,7 +175,7 @@ impl<'a> WifiNetwork<'a> {
                                        "SelectNetwork")
       .unwrap()
       .append1(self.path.clone());
-    try!(self.interface.conn.send_with_reply_and_block(msg, 1000));
+    try!(self.interface.conn.send_with_reply_and_block(msg, DBUS_TIMEOUT));
 
     let sleep = Duration::from_millis(200);
     let mut spent = Duration::from_millis(0);
