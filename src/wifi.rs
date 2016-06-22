@@ -135,7 +135,7 @@ impl<'a> WifiNetwork<'a> {
       Some(ref ssid) => return ssid.clone(),
       _ => (),
     }
-    
+
     let p = Props::new(self.interface.conn,
                        "fi.w1.wpa_supplicant1",
                        self.path.clone(),
@@ -166,7 +166,7 @@ impl<'a> WifiNetwork<'a> {
 
   fn associate(&self, timeout: Duration) -> Result<()> {
     println!("Associating with {}", self.ssid());
-    
+
     let msg = Message::new_method_call("fi.w1.wpa_supplicant1",
                                        self.interface.path.clone(),
                                        "fi.w1.wpa_supplicant1.Interface",
@@ -191,19 +191,25 @@ impl<'a> WifiNetwork<'a> {
   }
 }
 
+// TODO: Nice error handling
 pub fn with_temporary_network<F>(config: &WifiConfig, f: F) -> ()
   where F: FnOnce() -> () {
   let c = Connection::get_private(BusType::System).unwrap();
 
-  let interface = WifiInterface::find(&c, &config.interface).unwrap();
-  let original_network = interface.current_network().unwrap();
+  let interface = WifiInterface::find(&c, &config.interface)
+    .expect(&format!("Couldn't find interface {}", config.interface));
+
+  // TODO: Don't throw if we can't find the current network
+  let original_network = interface.current_network()
+    .expect("Couldn't find current network");
   println!("Original network: {}", original_network.ssid());
-  
-  let camera_network = interface.find_network(&config.ssid).unwrap();
+
+  let camera_network = interface.find_network(&config.ssid)
+    .expect(&format!("Couldn't find camera network {}", config.ssid));
 
   // TODO: Make configurable
   let timeout = Duration::from_secs(30);
-  
+
   camera_network.associate(timeout).unwrap();
   println!("Waiting for camera to become available ({}s timeout)...",
            timeout.as_secs());
