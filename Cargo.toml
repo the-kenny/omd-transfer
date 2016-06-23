@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Moritz Ulrich <moritz@tarn-vedra.de>"]
 
 [features]
-default = []
+default = [ "dbus" ]
 
 [dependencies]
 chrono = "0.2.22"
