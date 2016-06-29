@@ -193,10 +193,18 @@ pub fn execute_transfer<T: Transfer>(transfer: T, config: &Config) -> Result<()>
   let dir = transfer.download_directory().to_path_buf();
   try!(fs::create_dir_all(&dir));
 
-  for entry in entries {
+  // Used for formatting
+  let pad_width = format!("{}", entries.len()).len();
+
+  for (i,entry) in entries.iter().enumerate() {
     let mut target = dir.clone();
     target.push(&entry.filename);
-    println!("Downloading {} to {:?}", entry.filename, target);
+    println!("[{i:>pad$}/{len}] Downloading {filename} to {target}",
+             pad      = pad_width,
+             i        = i,
+             len      = entries.len(),
+             filename = entry.filename,
+             target   = target.display());
 
     let result = entry.download(&client, &target, config.overwrite_strategy);
     if result.is_err() {
