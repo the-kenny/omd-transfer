@@ -201,7 +201,7 @@ pub fn execute_transfer<T: Transfer>(transfer: T, config: &Config) -> Result<()>
     target.push(&entry.filename);
     println!("[{i:>pad$}/{len}] Downloading {filename} to {target}",
              pad      = pad_width,
-             i        = i,
+             i        = i+1,
              len      = entries.len(),
              filename = entry.filename,
              target   = target.display());
