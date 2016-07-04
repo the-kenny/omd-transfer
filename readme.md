@@ -19,9 +19,3 @@ current directory:
 ```
 omd-transfer --write-template
 ```
-
-# Future Ideas
-
-- Automatically connect to the camera network via DBUS.
-    - Allow (non-)root usage: Start as root, connect, `fork()`, then
-      drop privileges. Make parent process disconnect later.
