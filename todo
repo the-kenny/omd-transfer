@@ -1,0 +1,7 @@
+- Support either time-based or counter-based classification of new
+  files
+- Detect if images in folder are newer / counter is higher than in
+  state file
+- Daemon-Mode (Continuously retry fetching images)
+- Don't re-associate with camera network if already connected to camera network
+- Use new std::panic module in wifi-code
