@@ -15,7 +15,7 @@ fn print_usage(program: &str, opts: Options) {
   print!("{}", opts.usage(&brief));
 }
 
-fn write_usage() -> io::Result<()> {
+fn write_config_template() -> io::Result<()> {
   let file = fs::OpenOptions::new()
     .write(true)
     .create_new(true)
@@ -44,7 +44,7 @@ fn main() {
   let program = args[0].clone();
 
   let mut opts = Options::new();
-  opts.optopt("c", "config", "Config file to use. Defaults to ./config.toml", "FILE");
+  opts.optopt("c", "config", "Config file to use. Defaults to ~/.herbstmove.toml", "FILE");
   opts.optflag("t", "write-template", "Print config template to stdout");
   opts.optflag("h", "help", "print this help menu");
   let matches = match opts.parse(&args[1..]) {
@@ -58,20 +58,28 @@ fn main() {
   }
 
   if matches.opt_present("t") {
-    write_usage().expect("Failed to write config template");
+    write_config_template().expect("Failed to write config template");
     println!("Wrote config template to config.toml");
     return;
   }
 
   let config_file: PathBuf = matches.opt_str("c")
     .or(env::var("OMD_TRANSFER_CONFIG").ok())
-    .unwrap_or("config.toml".into())
-    .into();
+    .map(PathBuf::from)
+    .unwrap_or({
+      let mut homedir = env::home_dir().expect("Couldn't get home dir");
+      homedir.push(".omd-transfer.toml");
+      homedir
+    });
+  let config_file = config_file.canonicalize()
+    .expect("Couldn't canonicalize config_file");
 
   if !config_file.exists() {
     println!("File {} not found", config_file.display());
     return;
   }
+
+  println!("Using config from {}", config_file.display());
 
   let config = Config::from_file(&config_file);
 
