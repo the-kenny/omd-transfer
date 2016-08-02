@@ -82,11 +82,16 @@ impl Config {
 
     let incremental_dir = conf.lookup("incremental.download_directory")
       .and_then(toml::Value::as_str)
-      .map(PathBuf::from);
+      .map(Path::new)
+      .map(expand_tilde);
 
     let transfer_order_dir = conf.lookup("transfer_order.download_directory")
       .and_then(toml::Value::as_str)
-      .map(PathBuf::from);
+      .map(Path::new)
+      .map(expand_tilde);
+
+    info!("transfer_order_dir: {:?}", transfer_order_dir);
+    info!("incremental_dir: {:?}", incremental_dir);
 
     let power_off = conf.lookup("power_off")
       .and_then(toml::Value::as_bool)
@@ -118,5 +123,16 @@ impl Config {
 
   pub fn template() -> &'static str {
     include_str!("../config.template.toml")
+  }
+}
+
+use std::env;
+fn expand_tilde(p: &Path) -> PathBuf {
+  let tilde = Path::new("~");
+  if p.starts_with(tilde) {
+    let home = env::home_dir().expect("Couldn't get home dir");
+    home.join(p.strip_prefix(tilde).unwrap())
+  } else {
+    p.to_path_buf()
   }
 }
