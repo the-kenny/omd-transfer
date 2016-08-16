@@ -194,8 +194,9 @@ impl<'a> WifiNetwork<'a> {
 }
 
 // TODO: Nice error handling
+use std::panic;
 pub fn with_temporary_network<F>(config: &WifiConfig, f: F) -> ()
-  where F: FnOnce() -> () {
+  where F: FnOnce() -> () + panic::UnwindSafe {
   let c = Connection::get_private(BusType::System).unwrap();
 
   let interface = WifiInterface::find(&c, &config.interface)
@@ -209,7 +210,7 @@ pub fn with_temporary_network<F>(config: &WifiConfig, f: F) -> ()
   let camera_network = interface.find_network(&config.ssid)
     .expect(&format!("Couldn't find camera network {}", config.ssid));
 
-  // TODO: Make configurable
+  // TODO: Make timeout configurable
   let timeout = Duration::from_secs(30);
 
   camera_network.associate(timeout).unwrap();
@@ -219,8 +220,13 @@ pub fn with_temporary_network<F>(config: &WifiConfig, f: F) -> ()
     thread::sleep(Duration::from_millis(500));
   }
 
-  // TODO: Use 1.10's new unwind-API
-  f();
+  let result = panic::catch_unwind(|| {
+    f();
+  });
+
+  if let Err(e) = result {
+    println!("Uncaught error while transferring, aborting");
+  }
 
   println!("Reconnecting to old network...");
   original_network.associate(timeout).unwrap();

@@ -113,8 +113,9 @@ fn run_transfers<F: FnOnce() -> ()>(config: &Config, f: F) {
   f()
 }
 
+use std::panic;
 #[cfg(feature = "dbus")]
-fn run_transfers<F: FnOnce() -> ()>(config: &Config, f: F) {
+fn run_transfers<F: FnOnce() -> () + panic::UnwindSafe>(config: &Config, f: F) {
   match config.wifi {
     Some(ref config) => {
       use omd_transfer::wifi;
