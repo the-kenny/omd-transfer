@@ -50,8 +50,6 @@ pub struct Config {
   pub error_strategy: ErrorStrategy,
   pub overwrite_strategy: OverwriteStrategy,
 
-  pub power_off: bool,
-
   pub wifi: Option<WifiConfig>
 }
 
@@ -93,11 +91,6 @@ impl Config {
     info!("transfer_order_dir: {:?}", transfer_order_dir);
     info!("incremental_dir: {:?}", incremental_dir);
 
-    let power_off = conf.lookup("power_off")
-      .and_then(toml::Value::as_bool)
-      .expect("`power_off` not found in config file");
-
-    
     let wifi = conf.lookup("wifi.interface")
       .and_then(toml::Value::as_str)
       .and_then(|i| {
@@ -114,8 +107,6 @@ impl Config {
       transfer_order_dir: transfer_order_dir,
       error_strategy: error_strategy,
       overwrite_strategy: overwrite_strategy,
-
-      power_off: power_off,
 
       wifi: wifi
     }

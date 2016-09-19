@@ -93,11 +93,6 @@ fn main() {
       info!("Starting to execute incremental transfer");
       execute_transfer(transfer, &config).unwrap();
     });
-
-    if config.power_off {
-      println!("Powering off...");
-      power_off().expect("Failed to power off the cmaera");
-    }
   };
 
   // Workaround for https://github.com/rust-lang/rust/issues/15701

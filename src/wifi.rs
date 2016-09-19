@@ -224,7 +224,7 @@ pub fn with_temporary_network<F>(config: &WifiConfig, f: F) -> ()
     f();
   });
 
-  if let Err(e) = result {
+  if let Err(_) = result {
     println!("Uncaught error while transferring, aborting");
   }
 
