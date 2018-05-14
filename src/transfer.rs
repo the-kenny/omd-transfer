@@ -268,6 +268,7 @@ impl IncrementalTransfer {
   }
 
   fn store_download_date(&self, date: &NaiveDateTime) -> io::Result<()> {
+    // TODO: Make sure we don't write an older date (can happen for camera-developed ORFs)
     let mut f = try!(File::create(&self.state_file));
     try!(f.write_fmt(format_args!("{}", date.format(DATE_FORMAT))));
     try!(f.sync_all());

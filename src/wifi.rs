@@ -37,8 +37,8 @@ impl<'a> WifiInterface<'a> {
                        "fi.w1.wpa_supplicant1",
                        DBUS_TIMEOUT);
 
-    if let Ok(MessageItem::Array(interfaces, _)) = p.get("Interfaces") {
-      for path in interfaces {
+    if let Ok(MessageItem::Array(interfaces)) = p.get("Interfaces") {
+      for path in interfaces.iter() {
         if let MessageItem::ObjectPath(path) = path {
           let ip = Props::new(&conn,
                               "fi.w1.wpa_supplicant1",
@@ -50,7 +50,7 @@ impl<'a> WifiInterface<'a> {
             if ifname == interface_name {
               return Some(WifiInterface {
                 conn: conn,
-                path: path,
+                path: path.clone(),
                 props: ip,
                 name: interface_name.to_string(),
               })
@@ -92,10 +92,10 @@ let props = Props::new(&self.conn,
                        "fi.w1.wpa_supplicant1.Interface",
                        DBUS_TIMEOUT);
 
-if let Ok(Array(networks, _)) = props.get("Networks") {
-  for network in networks {
+if let Ok(Array(networks)) = props.get("Networks") {
+  for network in networks.iter() {
     if let MessageItem::ObjectPath(network) = network {
-      let network = WifiNetwork::new(network, &self);
+      let network = WifiNetwork::new(network.clone(), &self);
       if network.ssid() == name {
         return Some(network)
       }
@@ -144,8 +144,8 @@ impl<'a> WifiNetwork<'a> {
                        "fi.w1.wpa_supplicant1.Network",
                        DBUS_TIMEOUT);
 
-    if let Ok(Array(props, _)) = p.get("Properties") {
-      for prop in props {
+    if let Ok(Array(props)) = p.get("Properties") {
+      for prop in props.iter() {
         let (prop, val) = prop.inner().unwrap();
         let prop_name: &str = prop.inner().unwrap();
 
